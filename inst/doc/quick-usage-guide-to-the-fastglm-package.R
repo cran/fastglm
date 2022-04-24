@@ -1,16 +1,16 @@
-## ----setup, include = FALSE----------------------------------------------
+## ----setup, include = FALSE---------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
 
-## ---- eval = FALSE, echo=TRUE--------------------------------------------
+## ---- eval = FALSE, echo=TRUE-------------------------------------------------
 #  devtools::install_github("jaredhuling/fastglm")
 
-## ---- echo=TRUE----------------------------------------------------------
+## ---- echo=TRUE---------------------------------------------------------------
 library(fastglm)
 
-## ---- echo = TRUE--------------------------------------------------------
+## ---- echo = TRUE-------------------------------------------------------------
 data(esoph)
 x <- model.matrix(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp)
                                          + unclass(alcgp), data = esoph)
@@ -20,7 +20,7 @@ gfit1 <- fastglm(x = x, y = y, family = binomial(link = "cloglog"))
 
 summary(gfit1)
 
-## ---- fig.show='hold'----------------------------------------------------
+## ---- fig.show='hold'---------------------------------------------------------
 set.seed(1)
 x <- matrix(rnorm(10000 * 100), ncol = 100)
 y <- (exp(0.25 * x[,1] - 0.25 * x[,3] + 0.5 * x[,4] - 0.5 * x[,5] + rnorm(10000)) ) + 0.1
