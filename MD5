@@ -1,4 +1,4 @@
-ba1e30bf38e76a2343ab712afc178843 *DESCRIPTION
+bc69707ab81871504c87b57a794ad418 *DESCRIPTION
 85ec1cefda4849cf8e73390a8a83aff7 *NAMESPACE
 a6dcfd922186ce2420f7e99aa57f228b *R/RcppExports.R
 06ebc21b2f210ef72963447b703fc95a *R/bigmemory_methods.R
@@ -9,7 +9,11 @@ e94e44b3edf6c7d9e160eeefd78f8813 *README.md
 653e79ddf93b5726b1978e4a2825d71c *build/vignette.rds
 c3349281484ccf52c83eba797dad0679 *inst/doc/quick-usage-guide-to-the-fastglm-package.R
 d40d8da3eb9c35fdf0f7ca610b5ce5be *inst/doc/quick-usage-guide-to-the-fastglm-package.Rmd
-1ef5e82118af0793e1dc1fd02077dacd *inst/doc/quick-usage-guide-to-the-fastglm-package.html
+04f8da614722155fa2e44d8fa5eba48e *inst/doc/quick-usage-guide-to-the-fastglm-package.html
+5eefc299fc514e8611532c08d64ec79e *inst/include/bigmemory.h
+d0198eaf9353f1b5d1ee63819c7363f8 *inst/include/glm.h
+f425ec17a1a567c7bc0c54317862bbf1 *inst/include/glm_base.h
+9f652afe8aa55f40ca33487d57bcaa98 *inst/include/glm_big.h
 0a82d8f8e68ecf465f0bf1d2eb2e60b5 *man/deviance.Rd
 ebe33df0cd2f9f40eaae38f62d1cce95 *man/extract-methods.Rd
 71d781f448abd54091f3da4e010f7a2a *man/family.Rd
@@ -22,12 +26,8 @@ fd324a9ab5638d5ccbdcd9dea6452b86 *man/logLik.Rd
 f0969fc4f6b46addb7ae16d343d83552 *man/summary.Rd
 8627d46ec038de3c4c78b13b51b468d6 *src/Makevars
 f4e0dfb20ab1625bbc9be90f415fe770 *src/RcppExports.cpp
-766e6174fae3619ebc9b2989fa2c99a7 *src/bigmemory.cpp
-5eefc299fc514e8611532c08d64ec79e *src/bigmemory.h
+84a1a0bbca18f286fb50647242509186 *src/bigmemory.cpp
 3ffdc7ca85d151ce94473cf47f22245a *src/colmin_colmax.cpp
-aeb434ac31dd3970d3875e8cbd787ae4 *src/fit_glm_dense.cpp
-d0198eaf9353f1b5d1ee63819c7363f8 *src/glm.h
-f425ec17a1a567c7bc0c54317862bbf1 *src/glm_base.h
-9f652afe8aa55f40ca33487d57bcaa98 *src/glm_big.h
+156c167ff5225b7e0ac61de23bf42ccf *src/fit_glm_dense.cpp
 b9ef00679557992631776dcf74374e81 *vignettes/gen_data-1.png
 d40d8da3eb9c35fdf0f7ca610b5ce5be *vignettes/quick-usage-guide-to-the-fastglm-package.Rmd
