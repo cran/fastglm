@@ -2,7 +2,7 @@ Package: fastglm
 Type: Package
 Title: Fast and Stable Fitting of Generalized Linear Models using
         'RcppEigen'
-Version: 0.0.3
+Version: 0.0.4
 Authors@R: c(
     person("Jared", "Huling", , "jaredhuling@gmail.com", c("aut", "cre")),
     person("Douglas", "Bates", , , c("cph")),
@@ -20,15 +20,15 @@ Encoding: UTF-8
 Imports: Rcpp (>= 0.12.13), methods
 Depends: bigmemory
 LinkingTo: Rcpp, RcppEigen, BH, bigmemory
-RoxygenNote: 7.1.1
+RoxygenNote: 7.3.3
 Suggests: knitr, rmarkdown, glm2
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2022-05-23 15:40:18 UTC; huling
+Packaged: 2025-12-16 12:55:12 UTC; huling
 Author: Jared Huling [aut, cre],
   Douglas Bates [cph],
   Dirk Eddelbuettel [cph],
   Romain Francois [cph],
   Yixuan Qiu [cph]
 Repository: CRAN
-Date/Publication: 2022-05-23 16:50:02 UTC
+Date/Publication: 2025-12-16 13:40:02 UTC
