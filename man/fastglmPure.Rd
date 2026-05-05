@@ -2,7 +2,7 @@
 % Please edit documentation in R/fit_glm.R
 \name{fastglmPure}
 \alias{fastglmPure}
-\title{fast generalized linear model fitting}
+\title{Fast generalized linear model fitting}
 \usage{
 fastglmPure(
   x,
@@ -15,7 +15,8 @@ fastglmPure(
   mustart = NULL,
   method = 0L,
   tol = 1e-07,
-  maxit = 100L
+  maxit = 100L,
+  firth = FALSE
 )
 }
 \arguments{
@@ -23,8 +24,8 @@ fastglmPure(
 
 \item{y}{numeric response vector of length nobs.}
 
-\item{family}{a description of the error distribution and link function to be used in the model. 
-For \code{fastglmPure} this can only be the result of a call to a family function. 
+\item{family}{a description of the error distribution and link function to be used in the model.
+For \code{fastglmPure} this can only be the result of a call to a family function.
 (See \code{\link[stats]{family}} for details of family functions.)}
 
 \item{weights}{an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.}
@@ -45,6 +46,14 @@ Conquer SVD}
 \item{tol}{threshold tolerance for convergence. Should be a positive real number}
 
 \item{maxit}{maximum number of IRLS iterations. Should be an integer}
+
+\item{firth}{logical; if `TRUE` apply Firth's (1993) bias-reducing penalty
+to the score function. Currently supported only for
+`family = binomial(link = "logit")` on dense `x`. The penalty modifies
+the working response by `h_i (0.5 - mu_i) / (mu_i (1 - mu_i))` where
+`h_i` is the leverage; convergence is checked on the sup-norm of the
+coefficient update. See `logistf::logistf()` for the canonical
+reference implementation.}
 }
 \value{
 A list with the elements
@@ -57,7 +66,7 @@ A list with the elements
 \item{fitted.values}{the vector of fitted values}
 }
 \description{
-fast generalized linear model fitting
+Fast generalized linear model fitting
 }
 \examples{
 
@@ -117,4 +126,7 @@ max(abs(coef(gl1) - gf2$coef))
 max(abs(coef(gl1) - gf3$coef))
 max(abs(coef(gl1) - gf4$coef))
 
+}
+\seealso{
+[fastglm_fit()]
 }

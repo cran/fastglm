@@ -1,11 +1,135 @@
+# Map a family object to the integer FamilyCode enum understood by the C++
+# solver.  Returns -1L when the (family, link) pair has no native fast path,
+# in which case the solver falls back to the per-iteration R callbacks.
+family_code <- function(family) {
+    if (is.null(family) || is.null(family$family) || is.null(family$link))
+        return(-1L)
 
+    famname <- family$family
+    link    <- family$link
 
-#' fast generalized linear model fitting
+    # Quasi-binomial / quasi-poisson share C++ kernels with binomial / poisson.
+    # Dispersion handling is done R-side based on family$family.
+    if (famname == "quasibinomial") famname <- "binomial"
+    if (famname == "quasipoisson")  famname <- "poisson"
+
+    # MASS::negative.binomial(theta) sets family$family to "Negative Binomial(K)".
+    if (grepl("^Negative Binomial", famname)) famname <- "negbin"
+
+    # statmod::tweedie() uses a generic "power" link; map to the standard four.
+    # var.power / link.power are not direct slots on the family object — they
+    # live in the closure environment of family$variance / family$linkfun.
+    if (famname == "Tweedie") {
+        lp <- tweedie_link_power(family)
+        if (is.null(lp) || !is.finite(lp)) lp <- 0
+        link <- switch(as.character(lp),
+                       "0"   = "log",
+                       "1"   = "identity",
+                       "-1"  = "inverse",
+                       "0.5" = "sqrt",
+                       link)
+    }
+
+    key <- paste0(famname, ":", link)
+    code <- switch(key,
+        "gaussian:identity"          = 0L,
+        "gaussian:log"               = 1L,
+        "gaussian:inverse"           = 2L,
+        "binomial:logit"             = 3L,
+        "binomial:probit"            = 4L,
+        "binomial:cloglog"           = 5L,
+        "binomial:log"               = 6L,
+        "poisson:log"                = 7L,
+        "poisson:identity"           = 8L,
+        "poisson:sqrt"               = 9L,
+        "Gamma:log"                  = 10L,
+        "Gamma:inverse"              = 11L,
+        "Gamma:identity"             = 12L,
+        "inverse.gaussian:1/mu^2"    = 13L,
+        "inverse.gaussian:log"       = 14L,
+        "inverse.gaussian:identity"  = 15L,
+        "inverse.gaussian:inverse"   = 16L,
+        "negbin:log"                 = 17L,
+        "negbin:sqrt"                = 18L,
+        "negbin:identity"            = 19L,
+        "Tweedie:log"                = 20L,
+        "Tweedie:identity"           = 21L,
+        "Tweedie:inverse"            = 22L,
+        "Tweedie:sqrt"               = 23L,
+        -1L)
+    code
+}
+
+# Extract parameters needed by params-aware families.  Returns a length-3
+# numeric vector (theta, var.power, link.power); inert defaults are used
+# for params-free families.
+family_params <- function(family) {
+    out <- c(theta = 1.0, var_power = 0.0, link_power = 0.0)
+    if (is.null(family) || is.null(family$family)) return(out)
+
+    fam <- family$family
+
+    # Negative binomial: theta is encoded in the family$family string,
+    # e.g. "Negative Binomial(2.34)".  family$theta is also set by
+    # MASS::negative.binomial() / fastglm's negbin().
+    if (grepl("^Negative Binomial", fam)) {
+        if (!is.null(family$theta) && is.finite(family$theta) && family$theta > 0) {
+            out["theta"] <- family$theta
+        } else {
+            m <- regmatches(fam, regexec("\\(([^)]+)\\)", fam))[[1]]
+            if (length(m) >= 2L) {
+                v <- suppressWarnings(as.numeric(m[2]))
+                if (is.finite(v) && v > 0) out["theta"] <- v
+            }
+        }
+    }
+
+    if (fam == "Tweedie") {
+        vp <- tweedie_var_power(family)
+        if (is.numeric(vp) && length(vp) == 1L && is.finite(vp))
+            out["var_power"]  <- vp
+        lp <- tweedie_link_power(family)
+        if (is.numeric(lp) && length(lp) == 1L && is.finite(lp))
+            out["link_power"] <- lp
+    }
+
+    out
+}
+
+# statmod::tweedie() hides var.power / link.power inside the closure
+# environment of family$variance / family$linkfun.  Extract them defensively;
+# fall back to parsing the link string ("mu^0" -> 0).
+tweedie_var_power <- function(family) {
+    if (!is.null(family$var.power))
+        return(family$var.power)
+    e <- tryCatch(environment(family$variance), error = function(e) NULL)
+    if (!is.null(e) && exists("var.power", envir = e, inherits = FALSE))
+        return(get("var.power", envir = e, inherits = FALSE))
+    if (!is.null(e) && exists("p", envir = e, inherits = FALSE))
+        return(get("p", envir = e, inherits = FALSE))
+    NA_real_
+}
+
+tweedie_link_power <- function(family) {
+    if (!is.null(family$link.power))
+        return(family$link.power)
+    e <- tryCatch(environment(family$linkfun), error = function(e) NULL)
+    if (!is.null(e) && exists("link.power", envir = e, inherits = FALSE))
+        return(get("link.power", envir = e, inherits = FALSE))
+    # Fallback: parse the link string.  statmod sets it to e.g. "mu^0".
+    if (!is.null(family$link) && grepl("^mu\\^", family$link)) {
+        v <- suppressWarnings(as.numeric(sub("^mu\\^", "", family$link)))
+        if (is.finite(v)) return(v)
+    }
+    NA_real_
+}
+
+#' Fast generalized linear model fitting
 #'
-#' @param x input model matrix. Must be a matrix object 
+#' @param x input model matrix. Must be a matrix object
 #' @param y numeric response vector of length nobs.
-#' @param family a description of the error distribution and link function to be used in the model. 
-#' For \code{fastglmPure} this can only be the result of a call to a family function. 
+#' @param family a description of the error distribution and link function to be used in the model.
+#' For \code{fastglmPure} this can only be the result of a call to a family function.
 #' (See \code{\link[stats]{family}} for details of family functions.)
 #' @param weights an optional vector of 'prior weights' to be used in the fitting process. Should be a numeric vector.
 #' @param offset this can be used to specify an a priori known component to be included in the linear predictor during fitting. 
@@ -13,11 +137,18 @@
 #' @param start starting values for the parameters in the linear predictor.
 #' @param etastart starting values for the linear predictor.
 #' @param mustart values for the vector of means.
-#' @param method an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,   
+#' @param method an integer scalar with value 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition,
 #' 2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, 5 for the Bidiagonal Divide and 
 #' Conquer SVD
 #' @param tol threshold tolerance for convergence. Should be a positive real number
 #' @param maxit maximum number of IRLS iterations. Should be an integer
+#' @param firth logical; if `TRUE` apply Firth's (1993) bias-reducing penalty
+#'   to the score function. Currently supported only for
+#'   `family = binomial(link = "logit")` on dense `x`. The penalty modifies
+#'   the working response by `h_i (0.5 - mu_i) / (mu_i (1 - mu_i))` where
+#'   `h_i` is the leverage; convergence is checked on the sup-norm of the
+#'   coefficient update. See `logistf::logistf()` for the canonical
+#'   reference implementation.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
 #' \item{se}{a vector of the standard errors of the coefficient estimates}
@@ -26,9 +157,10 @@
 #' \item{residuals}{the vector of residuals}
 #' \item{s}{a numeric scalar - the root mean square for residuals}
 #' \item{fitted.values}{the vector of fitted values}
+#' @seealso [fastglm_fit()]
 #' @export
 #' @examples
-#' 
+#'
 #' set.seed(1)
 #' x <- matrix(rnorm(1000 * 25), ncol = 25)
 #' eta <- 0.1 + 0.25 * x[,1] - 0.25 * x[,3] + 0.75 * x[,5] -0.35 * x[,6] #0.25 * x[,1] - 0.25 * x[,3]
@@ -85,34 +217,60 @@
 #' max(abs(coef(gl1) - gf3$coef))
 #' max(abs(coef(gl1) - gf4$coef))
 #' 
-fastglmPure <- function(x, y, 
+fastglmPure <- function(x, y,
                         family   = gaussian(),
-                        weights  = rep(1, NROW(y)), 
-                        offset   = rep(0, NROW(y)), 
+                        weights  = rep(1, NROW(y)),
+                        offset   = rep(0, NROW(y)),
                         start    = NULL,
                         etastart = NULL,
                         mustart  = NULL,
                         method   = 0L,
                         tol      = 1e-7,
-                        maxit    = 100L)
+                        maxit    = 100L,
+                        firth    = FALSE)
 {
+    if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
+        stop("'firth' must be TRUE or FALSE.", call. = FALSE)
+    if (firth) {
+        if (is.null(family$family) || family$family != "binomial" ||
+            is.null(family$link) || family$link != "logit")
+            stop("'firth = TRUE' currently requires family = binomial(link = \"logit\").",
+                 call. = FALSE)
+        if (inherits(x, "dgCMatrix") || (requireNamespace("bigmemory", quietly = TRUE) &&
+                                          bigmemory::is.big.matrix(x)))
+            stop("'firth = TRUE' is not supported for sparse or big.matrix designs.",
+                 call. = FALSE)
+        # Firth uses the same Cholesky factor for the leverage and the WLS
+        # update; force LLT internally regardless of caller's `method`.
+        method <- 2L
+    }
     weights <- as.vector(weights)
     offset  <- as.vector(offset)
     
-    if (is.big.matrix(x))
+    is_sparse_matrix <- inherits(x, "dgCMatrix")
+    if (is_sparse_matrix)
+    {
+        is_big_matrix <- FALSE
+        if (method != 2 & method != 3)
+        {
+            stop("for sparse (dgCMatrix) objects, 'method' must be 2 (LLT) or 3 (LDLT). ",
+                 "QR / SVD on sparse matrices is not supported by this package.")
+        }
+    } else if (is.big.matrix(x))
     {
         is_big_matrix <- TRUE
         if (method != 2 & method != 3)
         {
-            method <- 3
-            warning("for big.matrix objects, 'method' must either be 2 (for LLT) or 3 (for LDLT) -- 'method' changed to 3.")
+            stop("for big.matrix objects, 'method' must be 2 (LLT) or 3 (LDLT). ",
+                 "QR / SVD methods would force the matrix to be fully read into RAM, ",
+                 "defeating the purpose of bigmemory.")
         }
     } else if (is.matrix(x))
     {
         is_big_matrix <- FALSE
     } else
     {
-        stop("x must be either a matrix or a big.matrix object")
+        stop("x must be a matrix, a big.matrix object, or a Matrix::dgCMatrix")
     }
     
     
@@ -194,23 +352,49 @@ fastglmPure <- function(x, y,
     
     if (is.null(start)) start <- rep(0, nvars)
     
-    if (!is_big_matrix)
+    fc <- family_code(family)
+    fp <- family_params(family)
+
+    if (is_sparse_matrix)
     {
-        res <- fit_glm(x, drop(y), drop(weights), drop(offset), 
+        res <- fit_sparse_glm(x, drop(y), drop(weights), drop(offset),
+                              drop(start), drop(mu), drop(eta),
+                              family$variance, family$mu.eta, family$linkinv, family$dev.resids,
+                              family$valideta, family$validmu,
+                              as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
+                              as.integer(fc), fp)
+        # Detect intercept-like columns (all entries identical) by max == min.
+        col_max <- apply(x, 2, max)
+        col_min <- apply(x, 2, min)
+        res$intercept <- any(is.int <- (col_max == col_min))
+    } else if (!is_big_matrix && firth)
+    {
+        res <- fit_glm_firth(x, drop(y), drop(weights), drop(offset),
+                             drop(start), drop(mu), drop(eta),
+                             family$variance, family$mu.eta, family$linkinv, family$dev.resids,
+                             family$valideta, family$validmu,
+                             as.double(tol[1]), as.integer(maxit[1]),
+                             as.integer(fc), fp)
+        res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
+    } else if (!is_big_matrix)
+    {
+        res <- fit_glm(x, drop(y), drop(weights), drop(offset),
                        drop(start), drop(mu), drop(eta),
-                       family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
+                       family$variance, family$mu.eta, family$linkinv, family$dev.resids,
                        family$valideta, family$validmu,
-                       as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]) )
-        
+                       as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
+                       as.integer(fc), fp)
+
         res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
     } else
     {
-        res <- fit_big_glm(x@address, drop(y), drop(weights), drop(offset), 
+        res <- fit_big_glm(x@address, drop(y), drop(weights), drop(offset),
                            drop(start), drop(mu), drop(eta),
-                           family$variance, family$mu.eta, family$linkinv, family$dev.resids, 
+                           family$variance, family$mu.eta, family$linkinv, family$dev.resids,
                            family$valideta, family$validmu,
-                           as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]) )
-        
+                           as.integer(method[1]), as.double(tol[1]), as.integer(maxit[1]),
+                           as.integer(fc), fp)
+
         res$intercept <- any(is.int <- big.colMax(x) == big.colMin(x))
     }
     
@@ -254,10 +438,11 @@ fastglmPure <- function(x, y,
     res$prior.weights <- weights
     res$y <- y
     res$n <- n
+    res$x <- x        # reference to the model matrix; used by vcovHC / vcovCL
     res
 }
 
-#' fast generalized linear model fitting
+#' Fast generalized linear model fitting
 #'
 #' @param x input model matrix. Must be a matrix object 
 #' @param y numeric response vector of length nobs.
@@ -275,6 +460,10 @@ fastglmPure <- function(x, y,
 #' 2 for the LLT Cholesky, or 3 for the LDLT Cholesky
 #' @param tol threshold tolerance for convergence. Should be a positive real number
 #' @param maxit maximum number of IRLS iterations. Should be an integer
+#' @param firth logical; if `TRUE` apply Firth's (1993) bias-reducing penalty
+#'   to the score function. Currently supported only for
+#'   `family = binomial(link = "logit")` on dense `x`. See `logistf::logistf()`
+#'   for the canonical reference implementation.
 #' @return A list with the elements
 #' \item{coefficients}{a vector of coefficients}
 #' \item{se}{a vector of the standard errors of the coefficient estimates}
@@ -283,6 +472,7 @@ fastglmPure <- function(x, y,
 #' \item{residuals}{the vector of residuals}
 #' \item{s}{a numeric scalar - the root mean square for residuals}
 #' \item{fitted.values}{the vector of fitted values}
+#' @seealso [fastglm_fit()]
 #' @export
 #' @examples
 #'
@@ -320,7 +510,10 @@ fastglmPure <- function(x, y,
 #' system.time(gfb1 <- fastglm(bigmat, y, family = binomial(), method = 3))
 #' }
 #'
-fastglm <- function(x, ...) UseMethod("fastglm")
+fastglm <- function(x, ...)
+{
+    UseMethod("fastglm")
+}
 
 
 #' bigLm default
@@ -328,16 +521,17 @@ fastglm <- function(x, ...) UseMethod("fastglm")
 #' @param ... not used
 #' @rdname fastglm
 #' @method fastglm default
-#' @export
-fastglm.default <- function(x, y, 
+#' @exportS3Method fastglm default
+fastglm.default <- function(x, y,
                             family = gaussian(),
-                            weights = NULL, 
-                            offset = NULL, 
+                            weights = NULL,
+                            offset = NULL,
                             start    = NULL,
                             etastart = NULL,
                             mustart  = NULL,
                             method = 0L, tol = 1e-8, maxit = 100L,
-                            ...) 
+                            firth = FALSE,
+                            ...)
 {
     ## family
     if(is.character(family))
@@ -368,9 +562,9 @@ fastglm.default <- function(x, y,
     if (is.null(weights)) weights <- rep(1, nobs)
     if (is.null(offset))  offset  <- rep(0, nobs)
     
-    res     <- fastglmPure(x, y, family, weights, offset, 
+    res     <- fastglmPure(x, y, family, weights, offset,
                            start, etastart, mustart,
-                           method, tol, maxit)
+                           method, tol, maxit, firth = firth)
     y <- res$y
     
     res$residuals <- (y - res$fitted.values) / family$mu.eta(res$linear.predictors)
@@ -379,13 +573,13 @@ fastglm.default <- function(x, y,
     # from summary.glm()
     dispersion <-
         if(family$family %in% c("poisson", "binomial"))  1
-        else if(res$df.residual > 0) 
+        else if(res$df.residual > 0)
         {
             est.disp <- TRUE
             if(any(weights == 0))
                 warning("observations with zero weight not used for calculating dispersion")
             sum((res$weights*res$residuals ^ 2)[weights > 0]) / res$df.residual
-        } else 
+        } else
         {
             est.disp <- TRUE
             NaN
@@ -421,7 +615,7 @@ fastglm.default <- function(x, y,
     
     
     res$call      <- match.call()
-    
-    class(res)    <- "fastglm"
+
+    class(res)    <- if (isTRUE(res$firth)) c("fastglm_firth", "fastglm") else "fastglm"
     res
 }
