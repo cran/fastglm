@@ -26,7 +26,7 @@
 #'
 #' @returns A list of class `c("fastglm_nb", "fastglm")` with the usual
 #'   fastglm components plus `theta`, `SE.theta`, `iter.theta`, and
-#'   `twologlik` (twice the maximised NB log-likelihood).
+#'   `twologlik` (twice the maximized NB log-likelihood).
 #'
 #' @examples
 #' set.seed(1)
@@ -50,7 +50,7 @@ fastglm_nb <- function(x, y,
                        method      = 2L,
                        tol         = 1e-8,
                        maxit       = 100L,
-                       outer.maxit = 25L,
+                       outer.maxit = 50L,
                        outer.tol   = 1e-7,
                        theta.tol   = 1e-8,
                        theta.maxit = 100L)
@@ -67,27 +67,36 @@ fastglm_nb <- function(x, y,
     if (is.null(offset))  offset  <- rep(0, n)
     weights <- as.numeric(weights); offset <- as.numeric(offset)
 
-    # Pilot Poisson fit to seed mu / eta and (if needed) theta.
-    pilot <- fastglmPure(x, y,
-                         family  = poisson(link = link),
-                         weights = weights,
-                         offset  = offset,
-                         start   = start,
-                         method  = as.integer(method),
-                         tol     = tol,
-                         maxit   = maxit)
-    mu_init  <- as.numeric(pilot$fitted.values)
-    eta_init <- as.numeric(pilot$linear.predictors)
-    beta_init <- if (!is.null(start)) as.numeric(start) else as.numeric(pilot$coefficients)
+    if (!is.null(start)) {
+        beta_init <- as.numeric(start)
+        pilot <- fastglmPure(x, y,
+                             family  = poisson(link = link),
+                             weights = weights,
+                             offset  = offset,
+                             start   = start,
+                             method  = as.integer(method),
+                             tol     = tol,
+                             maxit   = maxit)
+        mu_init  <- as.numeric(pilot$fitted.values)
+        eta_init <- as.numeric(pilot$linear.predictors)
+    } else {
+        mustart   <- y + 0.1667 * (y == 0)
+        lnk       <- make.link(link)
+        eta_init  <- as.numeric(lnk$linkfun(mustart))
+        mu_init   <- mustart
+        beta_init <- .lm.fit(x, eta_init - offset)$coefficients
+        beta_init[is.na(beta_init)] <- 0
+        eta_init  <- as.numeric(x %*% beta_init + offset)
+        mu_init   <- as.numeric(lnk$linkinv(eta_init))
+    }
 
-    # Theta init: caller-supplied, or MoM (signalled to C++ via theta <= 0).
     init_th <- if (!is.null(init.theta)) {
         if (!is.numeric(init.theta) || length(init.theta) != 1L ||
             !is.finite(init.theta) || init.theta <= 0)
             stop("'init.theta' must be a positive finite scalar.", call. = FALSE)
         init.theta
     } else {
-        -1
+        -1  # C++ MoM estimator from mu_init
     }
 
     # The C++ driver uses the native NB kernels for {log,sqrt,identity}, but
@@ -143,13 +152,18 @@ fastglm_nb <- function(x, y,
     res$family        <- final_family
     res$y             <- as.numeric(y)
     res$x             <- x
+    res$n             <- n
     res$prior.weights <- weights
     res$dispersion    <- 1                       # NB likelihood is fully specified
+    res$intercept     <- any(apply(x, 2, function(col) max(col) == min(col)))
     res$df.null       <- n - 1L
     res$null.deviance <- sum(final_family$dev.resids(
         as.numeric(y),
         rep(if (sum(weights) > 0) sum(weights * as.numeric(y))/sum(weights) else mean(y), n),
         weights))
+    aic_fn <- final_family$aic
+    res$aic <- aic_fn(res$y, res$n, res$fitted.values, res$prior.weights,
+                      res$deviance) + 2 * res$rank
     res$call <- match.call()
     class(res) <- c("fastglm_nb", "fastglm")
     res

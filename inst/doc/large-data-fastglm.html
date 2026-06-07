@@ -12,7 +12,7 @@
 
 <meta name="author" content="Jared Huling" />
 
-<meta name="date" content="2026-05-04" />
+<meta name="date" content="2026-06-05" />
 
 <title>Large-Data and Out-of-Core GLMs with ‘fastglm’</title>
 
@@ -342,7 +342,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <h1 class="title toc-ignore">Large-Data and Out-of-Core GLMs with
 ‘fastglm’</h1>
 <h4 class="author">Jared Huling</h4>
-<h4 class="date">2026-05-04</h4>
+<h4 class="date">2026-06-05</h4>
 
 
 
@@ -402,7 +402,8 @@ are rejected with an error rather than silently coerced to dense, since
 silently densifying a large sparse matrix is exactly the wrong thing to
 do:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">fastglm</span>(Xs, y, <span class="at">family =</span> <span class="fu">binomial</span>(), <span class="at">method =</span> <span class="dv">0</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="co">#&gt; Error in fastglmPure(x, y, family, weights, offset, start, etastart, mustart, : for sparse (dgCMatrix) objects, &#39;method&#39; must be 2 (LLT) or 3 (LDLT). QR / SVD on sparse matrices is not supported by this package.</span></span></code></pre></div>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="co">#&gt; Error in `fastglmPure()`:</span></span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="co">#&gt; ! for sparse (dgCMatrix) objects, &#39;method&#39; must be 2 (LLT) or 3 (LDLT). QR / SVD on sparse matrices is not supported by this package.</span></span></code></pre></div>
 </div>
 <div id="filebacked-big.matrix" class="section level1">
 <h1>Filebacked <code>big.matrix</code></h1>
@@ -440,7 +441,8 @@ converged estimates are identical to floating-point precision.</p>
 QR-style decompositions need the entire design matrix at once and would
 defeat the on-disc benefit, so they are rejected:</p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">fastglm</span>(Xb, y, <span class="at">family =</span> <span class="fu">binomial</span>(), <span class="at">method =</span> <span class="dv">0</span>)</span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co">#&gt; Error in fastglmPure(x, y, family, weights, offset, start, etastart, mustart, : for big.matrix objects, &#39;method&#39; must be 2 (LLT) or 3 (LDLT). QR / SVD methods would force the matrix to be fully read into RAM, defeating the purpose of bigmemory.</span></span></code></pre></div>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co">#&gt; Error in `fastglmPure()`:</span></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt; ! for big.matrix objects, &#39;method&#39; must be 2 (LLT) or 3 (LDLT). QR / SVD methods would force the matrix to be fully read into RAM, defeating the purpose of bigmemory.</span></span></code></pre></div>
 </div>
 <div id="streaming-from-an-external-source" class="section level1">
 <h1>Streaming from an external source</h1>

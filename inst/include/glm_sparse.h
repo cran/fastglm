@@ -3,6 +3,7 @@
 
 #include "glm_base.h"
 #include "families.h"
+#include "chunk_source.h"
 
 #include <Eigen/SparseCore>
 #include <Eigen/SparseCholesky>
@@ -35,6 +36,10 @@ protected:
     int rank;
     int fam_code;
     fglm::FamilyParams fam_params;
+    bool firth_;
+    double log_det_XtWX_;
+    Eigen::MatrixXd A_prev;
+    bool A_prev_available;
 
     // Sparse decompositions (analyzePattern done once, factorize per iter)
     SpLLT  Ch;
@@ -48,7 +53,7 @@ protected:
     // ------------------------------------------------------------------
     // family helpers (mirror glm::update_*)
     // ------------------------------------------------------------------
-    virtual void update_mu_eta()
+    void update_mu_eta() override
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
@@ -60,7 +65,7 @@ protected:
         std::copy(v.begin(), v.end(), mu_eta.data());
     }
 
-    virtual void update_var_mu()
+    void update_var_mu() override
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
@@ -72,7 +77,7 @@ protected:
         std::copy(v.begin(), v.end(), var_mu.data());
     }
 
-    virtual void update_mu()
+    void update_mu() override
     {
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
@@ -84,50 +89,62 @@ protected:
         std::copy(v.begin(), v.end(), mu.data());
     }
 
-    virtual void update_eta()
+    void update_eta() override
     {
         eta.noalias() = X * beta;
         eta += offset;
     }
 
-    virtual void update_z()
+    void update_z() override
     {
         z = (eta - offset).array() + (Y - mu).array() / mu_eta.array();
     }
 
-    virtual void update_w()
+    void update_w() override
     {
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
+            Eigen::Map<const Eigen::ArrayXd> me(mu_eta.data(), mu_eta.size());
+            Eigen::Map<const Eigen::ArrayXd> pw(weights.data(), weights.size());
+            Eigen::Map<Eigen::ArrayXd>       ww(w.data(), w.size());
+            if (fglm::stable_weights(fam_code, fam_params, m, me, pw, ww))
+                return;
+        }
         w = (weights.array() * mu_eta.array().square() / var_mu.array()).array().sqrt();
     }
 
-    virtual void update_dev_resids()
+    void update_dev_resids() override
     {
         devold = dev;
+        double std_dev;
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> wt(weights.data(), weights.size());
-            dev = fglm::dev_resids_sum(fam_code, fam_params, y, m, wt);
-            return;
+            std_dev = fglm::dev_resids_sum(fam_code, fam_params, y, m, wt);
+        } else {
+            Rcpp::NumericVector dr = dev_resids_fun(Y, mu, weights);
+            std_dev = Rcpp::sum(dr);
         }
-        Rcpp::NumericVector dr = dev_resids_fun(Y, mu, weights);
-        dev = Rcpp::sum(dr);
+        dev = firth_ ? (std_dev - log_det_XtWX_) : std_dev;
     }
 
-    virtual void update_dev_resids_dont_update_old()
+    void update_dev_resids_dont_update_old() override
     {
+        double std_dev;
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> wt(weights.data(), weights.size());
-            dev = fglm::dev_resids_sum(fam_code, fam_params, y, m, wt);
-            return;
+            std_dev = fglm::dev_resids_sum(fam_code, fam_params, y, m, wt);
+        } else {
+            Rcpp::NumericVector dr = dev_resids_fun(Y, mu, weights);
+            std_dev = Rcpp::sum(dr);
         }
-        Rcpp::NumericVector dr = dev_resids_fun(Y, mu, weights);
-        dev = Rcpp::sum(dr);
+        dev = firth_ ? (std_dev - log_det_XtWX_) : std_dev;
     }
 
-    virtual void step_halve()
+    void step_halve() override
     {
         beta = 0.5 * (beta.array() + beta_prev.array());
         update_eta();
@@ -152,11 +169,19 @@ protected:
         return Rcpp::as<bool>(validmu(mu));
     }
 
-    virtual void run_step_halving(int &iterr)
+    bool converged() override
     {
-        if (std::isinf(dev)) {
+        if (firth_)
+            return (beta - beta_prev).cwiseAbs().maxCoeff() < tol;
+        return std::abs(dev - devold) / (0.1 + std::abs(dev)) < tol;
+    }
+
+    void run_step_halving(int &iterr) override
+    {
+        const bool firth_skip = firth_;
+        if (!std::isfinite(dev)) {
             int itrr = 0;
-            while (std::isinf(dev)) {
+            while (!std::isfinite(dev)) {
                 if (++itrr > maxit) break;
                 step_halve();
                 update_dev_resids_dont_update_old();
@@ -170,7 +195,7 @@ protected:
             }
             update_dev_resids_dont_update_old();
         }
-        if ((dev - devold) / (0.1 + std::abs(dev)) >= tol && iterr > 0) {
+        if (!firth_skip && (dev - devold) / (0.1 + std::abs(dev)) >= tol && iterr > 0) {
             int itrr = 0;
             while ((dev - devold) / (0.1 + std::abs(dev)) >= -tol) {
                 if (++itrr > maxit) break;
@@ -181,10 +206,153 @@ protected:
     }
 
     // ------------------------------------------------------------------
+    // Sparse linear-algebra helpers shared by the plain and Firth solves.
+    // ------------------------------------------------------------------
+
+    // Factorize A with the active sparse Cholesky (LLT for type 2, LDLT for
+    // type 3) and solve A x = rhs.  analyzePattern is done once; the symbolic
+    // factor and the numeric factor are retained for the post-solve readouts
+    // (log|X'WX|, (X'WX)^{-1}).
+    Eigen::VectorXd factorize_and_solve(const SpMat &A, const Eigen::VectorXd &rhs)
+    {
+        if (type == 2) {
+            if (!pattern_analyzed) { Ch.analyzePattern(A); pattern_analyzed = true; }
+            Ch.factorize(A);
+            if (Ch.info() != Eigen::Success)
+                Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
+            return Ch.solve(rhs);
+        }
+        if (!pattern_analyzed) { ChD.analyzePattern(A); pattern_analyzed = true; }
+        ChD.factorize(A);
+        if (ChD.info() != Eigen::Success)
+            Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
+        return ChD.solve(rhs);
+    }
+
+    // (X' W^2 X)^{-1} from the retained factorization.
+    Eigen::MatrixXd inverse_XtWX()
+    {
+        Eigen::MatrixXd I_p = Eigen::MatrixXd::Identity(nvars, nvars);
+        if (type == 2) return Ch.solve(I_p);
+        return ChD.solve(I_p);
+    }
+
+    // ------------------------------------------------------------------
+    // Firth helpers (sparse path uses lagged leverages from A_prev)
+    // ------------------------------------------------------------------
+    void compute_d2mu_sparse(Eigen::ArrayXd &d2mu)
+    {
+        const double eps = std::numeric_limits<double>::epsilon();
+        if (fam_code >= 0) {
+            Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
+            Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
+            Eigen::Map<const Eigen::ArrayXd> d(mu_eta.data(), mu_eta.size());
+            fglm::d2mu_deta2(fam_code, fam_params, e, m, d, d2mu);
+        } else {
+            const double h = std::pow(eps, 1.0 / 3.0);
+            Eigen::VectorXd eta_p = eta.array() + h;
+            Eigen::VectorXd eta_m = eta.array() - h;
+            Rcpp::NumericVector dmu_p = mu_eta_fun(eta_p);
+            Rcpp::NumericVector dmu_m = mu_eta_fun(eta_m);
+            for (int i = 0; i < nobs; ++i)
+                d2mu[i] = (dmu_p[i] - dmu_m[i]) / (2.0 * h);
+        }
+    }
+
+    double compute_firth_phi_sparse()
+    {
+        const double eps = std::numeric_limits<double>::epsilon();
+        bool unit_disp = (fam_code >= fglm::FAM_BINOMIAL_LOGIT &&
+                          fam_code <= fglm::FAM_POISSON_SQRT);
+        if (fam_code == fglm::FAM_UNKNOWN) unit_disp = true;
+        if (unit_disp || nobs <= nvars) return 1.0;
+        Eigen::Map<const Eigen::ArrayXd> y_a(Y.data(), Y.size());
+        Eigen::Map<const Eigen::ArrayXd> m_a(mu.data(), mu.size());
+        Eigen::Map<const Eigen::ArrayXd> w_a(weights.data(), weights.size());
+        double phi = fglm::dev_resids_sum(fam_code, fam_params, y_a, m_a, w_a)
+                     / (nobs - nvars);
+        return (phi < eps) ? 1.0 : phi;
+    }
+
+    void compute_leverages_lagged(Eigen::VectorXd &h_out)
+    {
+        h_out.resize(nobs);
+        int chunk = fglm::default_chunk_rows();
+        for (Eigen::Index r = 0; r < nobs; r += chunk) {
+            Eigen::Index k = std::min<Eigen::Index>(chunk, nobs - r);
+            Eigen::MatrixXd X_k = X.middleRows(r, k);
+            Eigen::MatrixXd XA_k = X_k * A_prev;
+            h_out.segment(r, k) =
+                ((XA_k.array() * X_k.array()).rowwise().sum()
+                 * w.segment(r, k).array().square()).matrix();
+        }
+    }
+
+    void compute_log_det_XtWX_sparse()
+    {
+        double ld = 0.0;
+        if (type == 2) {
+            SpMat Lsp = Ch.matrixL();
+            for (int j = 0; j < nvars; ++j)
+                ld += std::log(Lsp.coeff(j, j));
+            log_det_XtWX_ = 2.0 * ld;
+        } else {
+            Eigen::VectorXd D = ChD.vectorD();
+            for (int j = 0; j < D.size(); ++j)
+                ld += std::log(std::abs(D[j]));
+            log_det_XtWX_ = ld;
+        }
+    }
+
+    void update_A_prev_sparse()
+    {
+        A_prev = inverse_XtWX();
+        A_prev_available = true;
+    }
+
+    void solve_wls_firth()
+    {
+        beta_prev = beta;
+        const double eps = std::numeric_limits<double>::epsilon();
+
+        Eigen::ArrayXd d2mu(nobs);
+        compute_d2mu_sparse(d2mu);
+        double phi = compute_firth_phi_sparse();
+
+        Eigen::VectorXd w2 = w.array().square();
+        XtWX = SpMat(X.adjoint()) * w2.asDiagonal() * X;
+
+        if (!A_prev_available) {
+            Xtwz.noalias() = X.adjoint() * (w2.array() * z.array()).matrix();
+        } else {
+            Eigen::VectorXd h_lev;
+            compute_leverages_lagged(h_lev);
+
+            Eigen::ArrayXd dmu3 = mu_eta.array().cube();
+            for (int i = 0; i < nobs; ++i)
+                if (std::abs(dmu3[i]) < eps)
+                    dmu3[i] = (dmu3[i] >= 0) ? eps : -eps;
+
+            Eigen::ArrayXd xi = phi * h_lev.array() * d2mu * var_mu.array()
+                              / (2.0 * weights.array().max(eps) * dmu3);
+            Eigen::VectorXd zstar = z + xi.matrix();
+            Xtwz.noalias() = X.adjoint() * (w2.array() * zstar.array()).matrix();
+        }
+
+        beta = factorize_and_solve(XtWX, Xtwz);
+        rank = nvars;
+
+        compute_log_det_XtWX_sparse();
+        update_A_prev_sparse();
+    }
+
+    // ------------------------------------------------------------------
     // Core sparse WLS solve: X' diag(w^2) X beta = X' diag(w^2) z.
     // ------------------------------------------------------------------
-    virtual void solve_wls(int /*iter*/)
+    void solve_wls(int /*iter*/) override
     {
+        if (firth_) { solve_wls_firth(); return; }
+
         beta_prev = beta;
 
         Eigen::VectorXd w2 = w.array().square();
@@ -193,33 +361,18 @@ protected:
         XtWX = SpMat(X.adjoint()) * w2.asDiagonal() * X;
         Xtwz.noalias() = X.adjoint() * (w2.array() * z.array()).matrix();
 
-        if (type == 2) {
-            if (!pattern_analyzed) { Ch.analyzePattern(XtWX); pattern_analyzed = true; }
-            Ch.factorize(XtWX);
-            beta = Ch.solve(Xtwz);
-        } else { // type == 3
-            if (!pattern_analyzed) { ChD.analyzePattern(XtWX); pattern_analyzed = true; }
-            ChD.factorize(XtWX);
-            beta = ChD.solve(Xtwz);
-        }
+        beta = factorize_and_solve(XtWX, Xtwz);
         rank = nvars;  // assume full rank for sparse Cholesky (factorize will fail otherwise)
     }
 
-    virtual void save_se()
+    void save_se() override
     {
-        // SE = sqrt(diag((X' W^2 X)^{-1})).  Solve against I_p and take diag.
-        Eigen::MatrixXd I_p = Eigen::MatrixXd::Identity(nvars, nvars);
-        Eigen::MatrixXd inv;
-        if (type == 2) inv = Ch.solve(I_p);
-        else           inv = ChD.solve(I_p);
-        se = inv.diagonal().array().sqrt();
+        se = inverse_XtWX().diagonal().array().sqrt();
     }
 
-    virtual void save_vcov()
+    void save_vcov() override
     {
-        Eigen::MatrixXd I_p = Eigen::MatrixXd::Identity(nvars, nvars);
-        if (type == 2) vcov = Ch.solve(I_p);
-        else           vcov = ChD.solve(I_p);
+        vcov = inverse_XtWX();
     }
 
 public:
@@ -234,7 +387,8 @@ public:
                Rcpp::Function &valideta_,
                Rcpp::Function &validmu_,
                double tol_, int maxit_, int type_, int fam_code_,
-               const fglm::FamilyParams &fam_params_ = fglm::FamilyParams()) :
+               const fglm::FamilyParams &fam_params_ = fglm::FamilyParams(),
+               bool firth_flag = false) :
         GlmBase<Eigen::VectorXd, Eigen::MatrixXd>(X_.rows(), X_.cols(), tol_, maxit_),
         X(X_), Y(Y_), weights(weights_), offset(offset_),
         variance_fun(variance_fun_), mu_eta_fun(mu_eta_fun_),
@@ -242,12 +396,14 @@ public:
         valideta(valideta_), validmu(validmu_),
         tol(tol_), maxit(maxit_), type(type_), rank(X_.cols()), fam_code(fam_code_),
         fam_params(fam_params_),
+        firth_(firth_flag), log_det_XtWX_(0.0),
+        A_prev(X_.cols(), X_.cols()), A_prev_available(false),
         pattern_analyzed(false), Xtwz(X_.cols())
     {}
 
     void init_parms(const Eigen::Map<Eigen::VectorXd> &start_,
                     const Eigen::Map<Eigen::VectorXd> &mu_,
-                    const Eigen::Map<Eigen::VectorXd> &eta_)
+                    const Eigen::Map<Eigen::VectorXd> &eta_) override
     {
         beta = start_;
         eta  = eta_;
@@ -256,8 +412,10 @@ public:
         rank = nvars;
     }
 
-    virtual int get_rank() { return rank; }
-    virtual Eigen::VectorXd get_weights() { return weights; }
+    int get_rank() override { return rank; }
+    Eigen::VectorXd get_weights() override { return weights; }
+    double get_log_det_XtWX() const { return log_det_XtWX_; }
+    bool   get_firth()        const { return firth_; }
 };
 
 #endif // GLM_SPARSE_H

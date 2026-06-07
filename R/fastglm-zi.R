@@ -134,7 +134,7 @@ fastglm_zi <- function(formula, data, subset, na.action,
     count_family <- if (dist == "poisson") poisson("log") else
                     # MASS::negative.binomial(theta) provides the family
                     # callbacks we need; use a dummy theta -- the C++ side
-                    # honours fam_code/fam_params directly so the value here
+                    # honors fam_code/fam_params directly so the value here
                     # only matters as a fallback.
                     {
                         if (!requireNamespace("MASS", quietly = TRUE))
@@ -231,7 +231,7 @@ fastglm_zi <- function(formula, data, subset, na.action,
     if (model) out$model <- mf
     if (y)     out$y     <- Y_resp
     if (x)     out$x     <- list(count = X_count, zero = Z_zero)
-    class(out) <- c("fastglm_zi", "fastglm")
+    class(out) <- "fastglm_zi"
     out
 }
 

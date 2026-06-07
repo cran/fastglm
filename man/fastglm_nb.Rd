@@ -15,7 +15,7 @@ fastglm_nb(
   method = 2L,
   tol = 1e-08,
   maxit = 100L,
-  outer.maxit = 25L,
+  outer.maxit = 50L,
   outer.tol = 1e-07,
   theta.tol = 1e-08,
   theta.maxit = 100L
@@ -55,7 +55,7 @@ sup-norm of the beta update plus the relative change in `theta`.}
 \value{
 A list of class `c("fastglm_nb", "fastglm")` with the usual
   fastglm components plus `theta`, `SE.theta`, `iter.theta`, and
-  `twologlik` (twice the maximised NB log-likelihood).
+  `twologlik` (twice the maximized NB log-likelihood).
 }
 \description{
 `fastglm_nb()` fits a negative-binomial regression model, jointly

@@ -12,7 +12,7 @@
 
 <meta name="author" content="Jared Huling" />
 
-<meta name="date" content="2026-05-04" />
+<meta name="date" content="2026-06-05" />
 
 <title>Quick Usage Guide to the ‘fastglm’ Package</title>
 
@@ -342,7 +342,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <h1 class="title toc-ignore">Quick Usage Guide to the ‘fastglm’
 Package</h1>
 <h4 class="author">Jared Huling</h4>
-<h4 class="date">2026-05-04</h4>
+<h4 class="date">2026-06-05</h4>
 
 
 
@@ -461,18 +461,18 @@ and thus tends to have better convergence properties in practice.</p>
 <span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="fu">system.time</span>(gfit1 <span class="ot">&lt;-</span> <span class="fu">glm</span>(y <span class="sc">~</span> x, <span class="at">family =</span> <span class="fu">Gamma</span>(<span class="at">link =</span> <span class="st">&quot;sqrt&quot;</span>),</span>
 <span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>                         <span class="at">method =</span> fastglm_fit))</span>
 <span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt;   0.275   0.005   0.281</span></span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt;   0.281   0.006   0.287</span></span>
 <span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a></span>
 <span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co"># glm</span></span>
 <span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a><span class="fu">system.time</span>(gfit2 <span class="ot">&lt;-</span> <span class="fu">glm</span>(y <span class="sc">~</span> x, <span class="at">family =</span> <span class="fu">Gamma</span>(<span class="at">link =</span> <span class="st">&quot;sqrt&quot;</span>)))</span>
 <span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="co">#&gt;   1.425   0.027   1.458</span></span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="co">#&gt;   1.414   0.030   1.446</span></span>
 <span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a></span>
 <span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="co"># glm2</span></span>
 <span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="fu">system.time</span>(gfit3 <span class="ot">&lt;-</span> <span class="fu">glm</span>(y <span class="sc">~</span> x, <span class="at">family =</span> <span class="fu">Gamma</span>(<span class="at">link =</span> <span class="st">&quot;sqrt&quot;</span>),</span>
 <span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a>                         <span class="at">method =</span> glm2<span class="sc">::</span>glm.fit2))</span>
 <span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt;   1.012   0.023   1.040</span></span>
+<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt;   1.008   0.023   1.033</span></span>
 <span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a></span>
 <span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a><span class="do">## Note that fastglm() returns estimates with the</span></span>
 <span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a><span class="do">## largest likelihood</span></span>
@@ -517,7 +517,7 @@ and thus tends to have better convergence properties in practice.</p>
 <span id="cb5-63"><a href="#cb5-63" tabindex="-1"></a><span class="fu">system.time</span>(gfit2 <span class="ot">&lt;-</span> <span class="fu">glm</span>(y <span class="sc">~</span> x, <span class="at">family =</span> <span class="fu">Gamma</span>(<span class="at">link =</span> <span class="st">&quot;sqrt&quot;</span>),</span>
 <span id="cb5-64"><a href="#cb5-64" tabindex="-1"></a>                         <span class="at">control =</span> <span class="fu">list</span>(<span class="at">maxit =</span> <span class="dv">100</span>)))</span>
 <span id="cb5-65"><a href="#cb5-65" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-66"><a href="#cb5-66" tabindex="-1"></a><span class="co">#&gt;   5.468   0.129   5.678</span></span>
+<span id="cb5-66"><a href="#cb5-66" tabindex="-1"></a><span class="co">#&gt;   5.355   0.104   5.462</span></span>
 <span id="cb5-67"><a href="#cb5-67" tabindex="-1"></a></span>
 <span id="cb5-68"><a href="#cb5-68" tabindex="-1"></a>gfit2<span class="sc">$</span>converged</span>
 <span id="cb5-69"><a href="#cb5-69" tabindex="-1"></a><span class="co">#&gt; [1] FALSE</span></span>

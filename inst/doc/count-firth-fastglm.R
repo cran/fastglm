@@ -11,9 +11,8 @@ knitr::opts_chunk$set(
 ## -----------------------------------------------------------------------------
 library(fastglm)
 suppressPackageStartupMessages({
-    library(MASS)        # glm.nb, rnegbin, sex2-style separation data
+    library(MASS)        # glm.nb, rnegbin
     library(pscl)        # hurdle, zeroinfl, bioChemists
-    library(logistf)     # canonical Firth implementation
     library(microbenchmark)
 })
 
@@ -49,28 +48,6 @@ print(mb_nb)
 fit_joint <- fastglm_nb(X, y)
 fit_known <- fastglm(X, y, family = negbin(theta = fit_joint$theta, link = "log"))
 max(abs(unname(coef(fit_known)) - unname(coef(fit_joint))))
-
-## ----eval = FALSE-------------------------------------------------------------
-# fastglm(x, y, family = binomial(), firth = TRUE)
-
-## -----------------------------------------------------------------------------
-data(sex2, package = "logistf")
-X <- model.matrix(~ age + oc + vic + vicl + vis + dia, data = sex2)
-y <- sex2$case
-
-fit_f <- fastglm(X, y, family = binomial(), firth = TRUE)
-fit_l <- logistf(case ~ age + oc + vic + vicl + vis + dia, data = sex2)
-
-cbind(fastglm = unname(coef(fit_f)), logistf = unname(coef(fit_l)))
-max(abs(unname(coef(fit_f)) - unname(coef(fit_l))))
-
-## -----------------------------------------------------------------------------
-mb_firth <- microbenchmark(
-    fastglm = fastglm(X, y, family = binomial(), firth = TRUE),
-    logistf = logistf(case ~ age + oc + vic + vicl + vis + dia, data = sex2),
-    times = 10L
-)
-print(mb_firth)
 
 ## -----------------------------------------------------------------------------
 data(bioChemists, package = "pscl")

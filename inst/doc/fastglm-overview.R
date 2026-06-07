@@ -82,7 +82,7 @@ n <- 50000; p <- 30
 x <- matrix(rnorm(n * p), n, p)
 y <- rpois(n, exp(x %*% rnorm(p) * 0.05 + 1))
 
-## force the R-callback path by giving the family object an unrecognised name
+## force the R-callback path by giving the family object an unrecognized name
 disguise <- function(fam) { fam$family <- paste0(fam$family, "*"); fam }
 
 mb <- microbenchmark(

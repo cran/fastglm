@@ -15,10 +15,9 @@
 #' @param fastmethod `integer`; the method used for fitting. Allowable values include 0 for the column-pivoted QR decomposition, 1 for the unpivoted QR decomposition, 2 for the LLT Cholesky, 3 for the LDLT Cholesky, 4 for the full pivoted QR decomposition, and 5 for the Bidiagonal Divide and Conquer SVD. Default is 0. Can also be supplied as `method` when not supplied directly as an argument from `glm()` (see Examples).
 #' @param tol `numeric`; threshold tolerance for convergence.
 #' @param maxit `integer`; the maximum number of IRLS iterations.
-#' @param firth `logical`; if `TRUE` apply Firth's (1993) bias-reducing
-#'   penalty to the score function. Currently supported only for
-#'   `family = binomial(link = "logit")` on dense `x`. See `logistf::logistf()`
-#'   for the canonical reference implementation.
+#' @param firth `logical`; if `TRUE` apply the Kosmidis--Firth mean
+#'   bias-reducing adjusted score (AS_mean) to the IRLS iteration.  Supported
+#'   for all standard GLM families on dense `x`.
 #' @param object a `fastglmFit` object; the output of a call to `glm()` with `method = fastglm_fit`.
 #' @param \dots for `vcov()` and `summary()`, other arguments passed downstream.
 #'
@@ -128,17 +127,6 @@ fastglm_fit <- function(x, y,
     control <- do.call("fastglm_control", control)
     if (!is.logical(firth) || length(firth) != 1L || is.na(firth))
         stop("'firth' must be TRUE or FALSE.", call. = FALSE)
-    if (firth) {
-        if (is.null(family$family) || family$family != "binomial" ||
-            is.null(family$link) || family$link != "logit")
-            stop("'firth = TRUE' currently requires family = binomial(link = \"logit\").",
-                 call. = FALSE)
-        if (inherits(x, "dgCMatrix") || (requireNamespace("bigmemory", quietly = TRUE) &&
-                                          bigmemory::is.big.matrix(x)))
-            stop("'firth = TRUE' is not supported for sparse or big.matrix designs.",
-                 call. = FALSE)
-        control$method <- 2L
-    }
     
     is_sparse_matrix <- inherits(x, "dgCMatrix")
     if (is_sparse_matrix)
@@ -263,7 +251,7 @@ fastglm_fit <- function(x, y,
                               variance, mu.eta, linkinv, dev.resids,
                               valideta, validmu,
                               as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
-                              as.integer(fc), fp)
+                              as.integer(fc), fp, firth = firth)
         col_max <- apply(x, 2, max)
         col_min <- apply(x, 2, min)
         res$intercept <- any(is.int <- (col_max == col_min))
@@ -273,7 +261,7 @@ fastglm_fit <- function(x, y,
                              drop(start), drop(mu), drop(eta),
                              variance, mu.eta, linkinv, dev.resids,
                              valideta, validmu,
-                             as.double(control$tol), as.integer(control$maxit),
+                             as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
                              as.integer(fc), fp)
         res$intercept <- any(is.int <- colMax_dense(x) == colMin_dense(x))
     } else if (!is_big_matrix)
@@ -293,7 +281,7 @@ fastglm_fit <- function(x, y,
                            variance, mu.eta, linkinv, dev.resids,
                            valideta, validmu,
                            as.integer(control$method), as.double(control$tol), as.integer(control$maxit),
-                           as.integer(fc), fp)
+                           as.integer(fc), fp, firth = firth)
 
         res$intercept <- any(is.int <- big.colMax(x) == big.colMin(x))
     }

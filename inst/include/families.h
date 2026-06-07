@@ -93,12 +93,21 @@ inline void linkinv(int code,
     case FAM_BINOMIAL_LOG:
     case FAM_NB_LOG:
     case FAM_TWEEDIE_LOG:
-        mu = eta.exp(); break;
+        mu = eta.exp().max(thresh_eps()); break;
     case FAM_GAUSSIAN_INVERSE:
     case FAM_GAMMA_INVERSE:
     case FAM_INVGAUSS_INVERSE:
     case FAM_TWEEDIE_INVERSE:
-        mu = 1.0 / eta; break;
+        // Clamp to +/-1/eps to avoid Inf when eta is near zero.
+        // valideta rejects eta==0, but near-zero values produce
+        // mu so large that downstream mu^2 / mu^3 overflow.
+        for (Eigen::Index i = 0; i < eta.size(); ++i) {
+            double e = eta[i];
+            double m = 1.0 / e;
+            if (!std::isfinite(m)) m = (e >= 0.0 ? 1.0 : -1.0) / thresh_eps();
+            mu[i] = m;
+        }
+        break;
     case FAM_BINOMIAL_LOGIT: {
         // Match R's logit_linkinv (src/library/stats/src/family.c) exactly:
         //   tmp = (eta < MTHRESH) ? DOUBLE_EPS
@@ -141,7 +150,13 @@ inline void linkinv(int code,
         break;
     }
     case FAM_INVGAUSS_INVMU2:
-        mu = 1.0 / eta.sqrt(); break;
+        // mu = 1/sqrt(eta); clamp to avoid Inf when eta is near zero.
+        for (Eigen::Index i = 0; i < eta.size(); ++i) {
+            double m = 1.0 / std::sqrt(eta[i]);
+            if (!std::isfinite(m)) m = 1.0 / thresh_eps();
+            mu[i] = m;
+        }
+        break;
     case FAM_POISSON_SQRT:
     case FAM_NB_SQRT:
     case FAM_TWEEDIE_SQRT:
@@ -180,8 +195,10 @@ inline void mu_eta(int code,
     case FAM_GAUSSIAN_INVERSE:
     case FAM_GAMMA_INVERSE:
     case FAM_INVGAUSS_INVERSE:
-    case FAM_TWEEDIE_INVERSE:
-        dmu = -1.0 / eta.square(); break;
+    case FAM_TWEEDIE_INVERSE: {
+        Eigen::ArrayXd eta2 = eta.square().max(thresh_eps());
+        dmu = -1.0 / eta2; break;
+    }
     case FAM_BINOMIAL_LOGIT: {
         // Match R's logit_mu_eta (src/library/stats/src/family.c) exactly:
         //   if (eta > THRESH || eta < MTHRESH)  mu_eta = DOUBLE_EPS
@@ -220,7 +237,14 @@ inline void mu_eta(int code,
     case FAM_POISSON_SQRT:
     case FAM_NB_SQRT:
     case FAM_TWEEDIE_SQRT:
-        dmu = 2.0 * eta; break;
+        // dmu/deta = 2*eta. The sqrt link admits eta < 0 (statmod's Tweedie
+        // sets valideta = TRUE), where the derivative is genuinely negative;
+        // floor only the magnitude away from zero so the sign is preserved.
+        dmu = 2.0 * eta;
+        for (Eigen::Index i = 0; i < dmu.size(); ++i)
+            if (std::fabs(dmu[i]) < thresh_eps())
+                dmu[i] = (dmu[i] < 0.0 ? -thresh_eps() : thresh_eps());
+        break;
     default:
         dmu.setOnes();
         break;
@@ -274,6 +298,56 @@ inline void variance(int code,
         v = mu.pow(params.var_power); break;
     default:
         v.setOnes();
+        break;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// dvariance: V'(mu) = dV/dmu, derivative of the variance function.
+// Used in the general Firth / AS_mean adjustment for non-canonical links.
+// ---------------------------------------------------------------------------
+inline void dvariance(int code,
+                      const FamilyParams& params,
+                      const Eigen::Ref<const Eigen::ArrayXd>& mu,
+                      Eigen::Ref<Eigen::ArrayXd> dv)
+{
+    switch (code) {
+    case FAM_GAUSSIAN_IDENTITY:
+    case FAM_GAUSSIAN_LOG:
+    case FAM_GAUSSIAN_INVERSE:
+        dv.setZero(); break;
+    case FAM_BINOMIAL_LOGIT:
+    case FAM_BINOMIAL_PROBIT:
+    case FAM_BINOMIAL_CLOGLOG:
+    case FAM_BINOMIAL_LOG:
+        dv = 1.0 - 2.0 * mu; break;
+    case FAM_POISSON_LOG:
+    case FAM_POISSON_IDENTITY:
+    case FAM_POISSON_SQRT:
+        dv.setOnes(); break;
+    case FAM_GAMMA_LOG:
+    case FAM_GAMMA_INVERSE:
+    case FAM_GAMMA_IDENTITY:
+        dv = 2.0 * mu; break;
+    case FAM_INVGAUSS_INVMU2:
+    case FAM_INVGAUSS_LOG:
+    case FAM_INVGAUSS_IDENTITY:
+    case FAM_INVGAUSS_INVERSE:
+        dv = 3.0 * mu.square(); break;
+    case FAM_NB_LOG:
+    case FAM_NB_SQRT:
+    case FAM_NB_IDENTITY: {
+        const double inv_theta = (params.theta > 0.0) ? 1.0 / params.theta : 0.0;
+        dv = 1.0 + 2.0 * mu * inv_theta;
+        break;
+    }
+    case FAM_TWEEDIE_LOG:
+    case FAM_TWEEDIE_IDENTITY:
+    case FAM_TWEEDIE_INVERSE:
+    case FAM_TWEEDIE_SQRT:
+        dv = params.var_power * mu.pow(params.var_power - 1.0); break;
+    default:
+        dv.setZero();
         break;
     }
 }
@@ -339,30 +413,28 @@ inline double dev_resids_sum(int code,
     case FAM_INVGAUSS_INVMU2:
     case FAM_INVGAUSS_LOG:
     case FAM_INVGAUSS_IDENTITY:
-    case FAM_INVGAUSS_INVERSE:
-        for (Eigen::Index i = 0; i < n; ++i) {
-            double yi = y[i], mi = mu[i];
-            double d  = yi - mi;
-            s += wt[i] * (d * d) / (yi * mi * mi);
-        }
+    case FAM_INVGAUSS_INVERSE: {
+        // (y - mu)^2 / (y * mu^2) rewritten as ((y/mu - 1)^2) / y
+        // to avoid mu^2 overflow.
+        Eigen::ArrayXd r = y / mu - 1.0;
+        s = (wt * r * r / y).sum();
         break;
+    }
 
     case FAM_NB_LOG:
     case FAM_NB_SQRT:
     case FAM_NB_IDENTITY: {
-        // d_i = 2 * [ y * log(y/mu) - (y + theta) * log((y + theta)/(mu + theta)) ]
-        // y = 0 limit: d_i = 2 * theta * log((mu + theta)/theta) = 2*theta*log1p(mu/theta).
+        // Stable NB deviance avoiding cancellation for large mu.
+        // d_i = 2*[y*log(y) - (y+t)*log(y+t) + y*log1p(t/mu) + t*log(mu+t)]
+        // For y=0: y.max(1).log() = log(1) = 0, so the y*log(y) term vanishes.
         const double theta = params.theta;
-        for (Eigen::Index i = 0; i < n; ++i) {
-            double yi = y[i], mi = mu[i];
-            double a = (yi > 0.0) ? yi * std::log(yi / mi) : 0.0;
-            // (y + theta) * log((y + theta)/(mu + theta)) computed in stable form.
-            // log((y + theta)/(mu + theta)) = log1p((y - mu)/(mu + theta))
-            double yt = yi + theta;
-            double mt = mi + theta;
-            double b  = yt * std::log(yt / mt);
-            s += 2.0 * wt[i] * (a - b);
-        }
+        Eigen::ArrayXd yt  = y + theta;
+        Eigen::ArrayXd mt  = mu + theta;
+        Eigen::ArrayXd ysf = y.max(1.0);
+        Eigen::ArrayXd d   = 2.0 * (y * ysf.log() - yt * yt.log()
+                                     + y * (theta / mu).log1p()
+                                     + theta * mt.log());
+        s = (wt * d).sum();
         break;
     }
 
@@ -415,6 +487,79 @@ inline double dev_resids_sum(int code,
     }
 
     return s;
+}
+
+// ---------------------------------------------------------------------------
+// d2mu_deta2: d²μ / dη²  (second derivative of the inverse link)
+//
+// Needed by the generalized Firth / AS_mean bias-reducing penalty.  The
+// per-observation adjustment to the working response is
+//
+//   ξ_i = h_i · (d²μ/dη²)_i · V(μ_i) / (2 · pw_i · (dμ/dη)_i³)
+//
+// For the canonical logit link this collapses to the familiar
+//   ξ_i = h_i · (0.5 - μ_i) / (μ_i (1 - μ_i)).
+// ---------------------------------------------------------------------------
+inline void d2mu_deta2(int code,
+                       const FamilyParams& /*params*/,
+                       const Eigen::Ref<const Eigen::ArrayXd>& eta,
+                       const Eigen::Ref<const Eigen::ArrayXd>& mu,
+                       const Eigen::Ref<const Eigen::ArrayXd>& dmu,
+                       Eigen::Ref<Eigen::ArrayXd> d2mu)
+{
+    switch (code) {
+    // Identity link: d²μ/dη² = 0
+    case FAM_GAUSSIAN_IDENTITY:
+    case FAM_POISSON_IDENTITY:
+    case FAM_GAMMA_IDENTITY:
+    case FAM_INVGAUSS_IDENTITY:
+    case FAM_NB_IDENTITY:
+    case FAM_TWEEDIE_IDENTITY:
+        d2mu.setZero(); break;
+
+    // Log link: μ = exp(η), d²μ/dη² = exp(η) = dμ/dη
+    case FAM_GAUSSIAN_LOG:
+    case FAM_POISSON_LOG:
+    case FAM_GAMMA_LOG:
+    case FAM_INVGAUSS_LOG:
+    case FAM_BINOMIAL_LOG:
+    case FAM_NB_LOG:
+    case FAM_TWEEDIE_LOG:
+        d2mu = dmu; break;
+
+    // Inverse link: μ = 1/η, d²μ/dη² = 2/η³
+    case FAM_GAUSSIAN_INVERSE:
+    case FAM_GAMMA_INVERSE:
+    case FAM_INVGAUSS_INVERSE:
+    case FAM_TWEEDIE_INVERSE:
+        d2mu = 2.0 / (eta * eta * eta); break;
+
+    // Logit: μ = logistic(η), d²μ/dη² = μ(1−μ)(1−2μ)
+    case FAM_BINOMIAL_LOGIT:
+        d2mu = mu * (1.0 - mu) * (1.0 - 2.0 * mu); break;
+
+    // Probit: μ = Φ(η), d²μ/dη² = −η · φ(η) = −η · dμ/dη
+    case FAM_BINOMIAL_PROBIT:
+        d2mu = -eta * dmu; break;
+
+    // Cloglog: μ = 1−exp(−exp(η)), d²μ/dη² = dμ/dη · (1 − exp(η))
+    case FAM_BINOMIAL_CLOGLOG:
+        d2mu = dmu * (1.0 - eta.exp()); break;
+
+    // 1/μ² link: μ = η^{−1/2}, d²μ/dη² = (3/4) · η^{−5/2}
+    case FAM_INVGAUSS_INVMU2:
+        d2mu = 0.75 / eta.pow(2.5); break;
+
+    // Sqrt link: μ = η², d²μ/dη² = 2
+    case FAM_POISSON_SQRT:
+    case FAM_NB_SQRT:
+    case FAM_TWEEDIE_SQRT:
+        d2mu.setConstant(2.0); break;
+
+    default:
+        d2mu.setZero();
+        break;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -474,6 +619,48 @@ inline bool validmu(int code,
         return mu.allFinite() && (mu > 0.0).all();
     default:
         return mu.allFinite();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Stable IRLS working-weight computation for families where the generic
+// formula  w = sqrt(prior_wt * mu_eta^2 / V(mu))  can overflow.
+//
+// For a log link, mu_eta = mu for all families.  Then:
+//
+//   Gamma log:     w^2 = mu^2 / mu^2 = 1
+//   InvGauss log:  w^2 = mu^2 / mu^3 = 1/mu
+//   NB log:        w^2 = mu^2 / (mu + mu^2/theta) = mu*theta/(theta+mu)
+//
+// Each of these is bounded and avoids computing V(mu) which can overflow.
+// Returns TRUE if a stable formula was used (caller should skip the
+// generic path).
+// ---------------------------------------------------------------------------
+inline bool stable_weights(int code,
+                           const FamilyParams& params,
+                           const Eigen::Ref<const Eigen::ArrayXd>& mu,
+                           const Eigen::Ref<const Eigen::ArrayXd>& /*mu_eta*/,
+                           const Eigen::Ref<const Eigen::ArrayXd>& prior_wt,
+                           Eigen::Ref<Eigen::ArrayXd> w)
+{
+    switch (code) {
+    case FAM_GAMMA_LOG:
+        // w^2 = prior_wt * mu^2 / mu^2 = prior_wt
+        w = prior_wt.sqrt();
+        return true;
+    case FAM_INVGAUSS_LOG:
+        // w^2 = prior_wt * mu^2 / mu^3 = prior_wt / mu
+        w = (prior_wt / mu).sqrt();
+        return true;
+    case FAM_NB_LOG: {
+        const double theta = params.theta;
+        if (theta <= 0.0) return false;
+        // w^2 = prior_wt * mu * theta / (theta + mu)
+        w = (prior_wt * theta * mu / (theta + mu)).sqrt();
+        return true;
+    }
+    default:
+        return false;
     }
 }
 
