@@ -12,7 +12,7 @@
 
 <meta name="author" content="Jared Huling" />
 
-<meta name="date" content="2026-06-05" />
+<meta name="date" content="2026-08-26" />
 
 <title>Firth Bias-Reduced GLMs with ‘fastglm’</title>
 
@@ -341,7 +341,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">Firth Bias-Reduced GLMs with ‘fastglm’</h1>
 <h4 class="author">Jared Huling</h4>
-<h4 class="date">2026-06-05</h4>
+<h4 class="date">2026-08-26</h4>
 
 
 
@@ -411,8 +411,8 @@ infrastructure:</p>
 <span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="fu">print</span>(mb, <span class="at">unit =</span> <span class="st">&quot;ms&quot;</span>)</span>
 <span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt; Unit: milliseconds</span></span>
 <span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt;     expr      min       lq      mean   median       uq      max neval cld</span></span>
-<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt;  fastglm 0.255717 0.265229 0.2795995 0.273798 0.283351 0.349320    10  a </span></span>
-<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;  logistf 1.263456 1.279077 1.3051735 1.287584 1.313230 1.411876    10   b</span></span></code></pre></div>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt;  fastglm 0.282449 0.290854 0.3289512 0.328451 0.346737 0.416847    10  a </span></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;  logistf 1.353943 1.402938 1.4900630 1.480223 1.560747 1.717613    10   b</span></span></code></pre></div>
 </div>
 <div id="general-glm-families" class="section level1">
 <h1>General GLM families</h1>
@@ -587,12 +587,12 @@ covariates:</p>
 <span id="cb13-35"><a href="#cb13-35" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">&quot;%-20s fastglm=%7.2f ms  brglm2=%7.2f ms  speedup=%.1fx</span><span class="sc">\n</span><span class="st">&quot;</span>,</span>
 <span id="cb13-36"><a href="#cb13-36" tabindex="-1"></a>                nm, s<span class="sc">$</span>median[<span class="dv">1</span>], s<span class="sc">$</span>median[<span class="dv">2</span>], s<span class="sc">$</span>median[<span class="dv">2</span>] <span class="sc">/</span> s<span class="sc">$</span>median[<span class="dv">1</span>]))</span>
 <span id="cb13-37"><a href="#cb13-37" tabindex="-1"></a>}</span>
-<span id="cb13-38"><a href="#cb13-38" tabindex="-1"></a><span class="co">#&gt; binomial logit       fastglm=   3.22 ms  brglm2=  13.31 ms  speedup=4.1x</span></span>
-<span id="cb13-39"><a href="#cb13-39" tabindex="-1"></a><span class="co">#&gt; binomial probit      fastglm=   4.22 ms  brglm2=  15.77 ms  speedup=3.7x</span></span>
-<span id="cb13-40"><a href="#cb13-40" tabindex="-1"></a><span class="co">#&gt; binomial cloglog     fastglm=   5.58 ms  brglm2=  16.75 ms  speedup=3.0x</span></span>
-<span id="cb13-41"><a href="#cb13-41" tabindex="-1"></a><span class="co">#&gt; poisson log          fastglm=   3.66 ms  brglm2= 121.21 ms  speedup=33.1x</span></span>
-<span id="cb13-42"><a href="#cb13-42" tabindex="-1"></a><span class="co">#&gt; Gamma log            fastglm=   3.64 ms  brglm2= 100.23 ms  speedup=27.6x</span></span>
-<span id="cb13-43"><a href="#cb13-43" tabindex="-1"></a><span class="co">#&gt; gaussian identity    fastglm=   1.02 ms  brglm2=  21.17 ms  speedup=20.7x</span></span></code></pre></div>
+<span id="cb13-38"><a href="#cb13-38" tabindex="-1"></a><span class="co">#&gt; binomial logit       fastglm=   3.67 ms  brglm2=  16.34 ms  speedup=4.5x</span></span>
+<span id="cb13-39"><a href="#cb13-39" tabindex="-1"></a><span class="co">#&gt; binomial probit      fastglm=   6.03 ms  brglm2=  19.82 ms  speedup=3.3x</span></span>
+<span id="cb13-40"><a href="#cb13-40" tabindex="-1"></a><span class="co">#&gt; binomial cloglog     fastglm=   5.24 ms  brglm2=  22.02 ms  speedup=4.2x</span></span>
+<span id="cb13-41"><a href="#cb13-41" tabindex="-1"></a><span class="co">#&gt; poisson log          fastglm=   4.29 ms  brglm2= 138.73 ms  speedup=32.4x</span></span>
+<span id="cb13-42"><a href="#cb13-42" tabindex="-1"></a><span class="co">#&gt; Gamma log            fastglm=   4.14 ms  brglm2= 118.31 ms  speedup=28.6x</span></span>
+<span id="cb13-43"><a href="#cb13-43" tabindex="-1"></a><span class="co">#&gt; gaussian identity    fastglm=   1.80 ms  brglm2=  27.47 ms  speedup=15.2x</span></span></code></pre></div>
 </div>
 <div id="references" class="section level1">
 <h1>References</h1>

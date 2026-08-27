@@ -12,7 +12,7 @@
 
 <meta name="author" content="Jared Huling" />
 
-<meta name="date" content="2026-06-05" />
+<meta name="date" content="2026-08-26" />
 
 <title>Overview of the ‘fastglm’ Package</title>
 
@@ -341,7 +341,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">Overview of the ‘fastglm’ Package</h1>
 <h4 class="author">Jared Huling</h4>
-<h4 class="date">2026-06-05</h4>
+<h4 class="date">2026-08-26</h4>
 
 
 
@@ -458,7 +458,7 @@ The Cholesky methods (<code>2</code> and <code>3</code>) are roughly
 <span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;   0.002   0.000   0.002</span></span>
 <span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="fu">system.time</span>(f3 <span class="ot">&lt;-</span> <span class="fu">fastglm</span>(x, y, <span class="at">family =</span> <span class="fu">binomial</span>(), <span class="at">method =</span> <span class="dv">3</span>))     <span class="co"># LDLT</span></span>
 <span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt;   0.002   0.000   0.003</span></span></code></pre></div>
+<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt;   0.003   0.000   0.002</span></span></code></pre></div>
 </div>
 <div id="stability" class="section level1">
 <h1>Stability</h1>
@@ -598,9 +598,9 @@ the four family functions:</p>
 <span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a>)</span>
 <span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a><span class="fu">print</span>(mb)</span>
 <span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a><span class="co">#&gt; Unit: milliseconds</span></span>
-<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a><span class="co">#&gt;      expr      min       lq     mean  median       uq      max neval cld</span></span>
-<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a><span class="co">#&gt;    native 17.63775 18.34652 19.08638 18.5418 19.89201 21.01381     5  a </span></span>
-<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a><span class="co">#&gt;  callback 23.84285 24.58134 25.66206 25.6127 26.66214 27.61125     5   b</span></span></code></pre></div>
+<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a><span class="co">#&gt;      expr      min       lq     mean   median       uq      max neval cld</span></span>
+<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a><span class="co">#&gt;    native 20.26351 21.02849 21.55994 21.26838 22.09428 23.14503     5  a </span></span>
+<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a><span class="co">#&gt;  callback 29.96538 30.14283 31.94754 30.67452 32.47065 36.48430     5   b</span></span></code></pre></div>
 <p>The <em>fastglm</em> package switches transparently between the two
 paths; user code does not change.</p>
 </div>
