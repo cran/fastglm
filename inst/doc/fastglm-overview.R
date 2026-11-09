@@ -1,94 +1,60 @@
-## ----setup, include = FALSE---------------------------------------------------
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  warning = FALSE,
-  message = FALSE,
-  echo = TRUE,
-  eval = TRUE
-)
+## ----setup, include=FALSE-----------------------------------------------------
+knitr::opts_chunk$set(collapse=TRUE, comment="#>", message=FALSE)
 
 ## -----------------------------------------------------------------------------
 library(fastglm)
-
-## -----------------------------------------------------------------------------
-data(esoph)
-x <- model.matrix(~ agegp + unclass(tobgp) + unclass(alcgp),
-                  data = esoph)
-y <- cbind(esoph$ncases, esoph$ncontrols)
-
-fit <- fastglm(x, y, family = binomial(link = "cloglog"))
+set.seed(41)
+d <- data.frame(x=rnorm(500), group=factor(rep(letters[1:4],125)),
+                exposure=runif(500,.5,2))
+d$y <- rpois(500, d$exposure*exp(.2+.4*d$x))
+fit <- fastglm(y~x+group+offset(log(exposure)), data=d, family=poisson(),
+               method="auto")
 summary(fit)
+predict(fit, newdata=d[1:4,], type="response", se.fit=TRUE)
 
 ## -----------------------------------------------------------------------------
-fit2 <- glm(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) + unclass(alcgp),
-            data = esoph, family = binomial(link = "cloglog"),
-            method = fastglm_fit)
+fastglm_diagnostics(fit)
 
 ## -----------------------------------------------------------------------------
-set.seed(123)
-n <- 5000; p <- 30
-x <- matrix(rnorm(n * p), n, p)
-y <- rbinom(n, 1, plogis(x %*% rnorm(p) * 0.05))
-
-system.time(f0 <- fastglm(x, y, family = binomial()))                 # default
-system.time(f2 <- fastglm(x, y, family = binomial(), method = 2))     # LLT
-system.time(f3 <- fastglm(x, y, family = binomial(), method = 3))     # LDLT
+vcov(fit)
+confint(fit, parm="x")
+vcov(fit, type="HC1")
 
 ## -----------------------------------------------------------------------------
-fit <- fastglm(x, y, family = binomial(), method = 2)
-
-V    <- vcov(fit)
-dim(V)
-
-## standard errors agree with the diagonal of vcov()
-all.equal(sqrt(diag(V)), unname(coef(summary(fit))[, "Std. Error"]))
+cluster <- rep(seq_len(100), each=5)
+robust <- fastglm_vcov(fit, type="HC1", cluster=cluster)
+fastglm_average(fit, vcov.=robust)
 
 ## -----------------------------------------------------------------------------
-library(sandwich)
-
-V_hc <- vcovHC(fit, type = "HC0")
-V_hc[1:3, 1:3]
-
-cluster <- rep(seq_len(20), length.out = n)
-V_cl    <- vcovCL(fit, cluster = cluster, type = "HC1")
-V_cl[1:3, 1:3]
+fastglm_wald_test(fit,terms="group")
+fastglm_wald_test(fit,terms="group",vcov.=robust)
 
 ## -----------------------------------------------------------------------------
-xnew <- x[1:5, , drop = FALSE]
-predict(fit, newdata = xnew, type = "response", se.fit = TRUE)
+group_comparison <- fastglm_wald_test(fit,contrast=c(groupc=1,groupb=-1))
+group_comparison
+as.data.frame(group_comparison)
 
 ## -----------------------------------------------------------------------------
-n <- 4000
-X <- cbind(1, matrix(rnorm(n * 3), n, 3))
-y <- rbinom(n, 1, plogis(X %*% c(0.2, 0.4, -0.2, 0.3)))
+X <- model.matrix(~x+group, d)
+Y <- cbind(outcome1=rnorm(nrow(d))+.4*d$x,
+           outcome2=rnorm(nrow(d))-.2*d$x)
+design <- fastglm_prepare(X)
+models <- fastglm_batch(design, Y)
+vapply(models, function(z) coef(z)["x"], numeric(1))
 
-chunk_size <- 1000
-chunks <- function(k) {
-    idx <- ((k - 1) * chunk_size + 1):(k * chunk_size)
-    list(X = X[idx, , drop = FALSE], y = y[idx])
-}
+## -----------------------------------------------------------------------------
+set.seed(148)
+mu1 <- exp(.2+.3*d$x)
+mu2 <- exp(.5-.2*d$x)
+Y_positive <- cbind(outcome1=rgamma(nrow(d),shape=3,scale=mu1/3),
+                    outcome2=rgamma(nrow(d),shape=3,scale=mu2/3))
+design_firth <- fastglm_prepare(X,firth=TRUE)
+models_firth <- fastglm_batch(design_firth,Y_positive,family=Gamma("log"))
+vapply(models_firth,function(z) coef(z)["x"],numeric(1))
+vapply(models_firth,function(z) z$dispersion,numeric(1))
 
-fit_stream <- fastglm_streaming(chunks, n_chunks = 4, family = binomial())
-fit_full   <- fastglm(X, y, family = binomial(), method = 2)
-
-max(abs(coef(fit_stream) - coef(fit_full)))
-
-## ----eval = TRUE--------------------------------------------------------------
-library(microbenchmark)
-
-set.seed(7)
-n <- 50000; p <- 30
-x <- matrix(rnorm(n * p), n, p)
-y <- rpois(n, exp(x %*% rnorm(p) * 0.05 + 1))
-
-## force the R-callback path by giving the family object an unrecognized name
-disguise <- function(fam) { fam$family <- paste0(fam$family, "*"); fam }
-
-mb <- microbenchmark(
-    native   = fastglm(x, y, family = poisson(),            method = 2),
-    callback = fastglm(x, y, family = disguise(poisson()),  method = 2),
-    times = 5L
-)
-print(mb)
+## -----------------------------------------------------------------------------
+compact <- fastglm(X, d$y, poisson(), method="auto",
+                   inference="none", retain.data=FALSE)
+coef(compact)
 

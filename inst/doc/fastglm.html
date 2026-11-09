@@ -12,7 +12,7 @@
 
 <meta name="author" content="Jared Huling" />
 
-<meta name="date" content="2026-08-26" />
+<meta name="date" content="2026-11-07" />
 
 <title>Quick Usage Guide to the ‘fastglm’ Package</title>
 
@@ -342,26 +342,27 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <h1 class="title toc-ignore">Quick Usage Guide to the ‘fastglm’
 Package</h1>
 <h4 class="author">Jared Huling</h4>
-<h4 class="date">2026-08-26</h4>
+<h4 class="date">2026-11-07</h4>
 
 
 
-<p>The <em>fastglm</em> package is intended to be a
-<strong>fast</strong> <em>and</em> <strong>stable</strong> alternative
-to the <code>glm()</code> and <code>glm2::glm2()</code> functions for
-fitting generalized linear models. <em>fastglm</em> is compatible with
-<code>R</code>’s <code>family</code> objects (see <code>?family</code>).
-The package can be installed via</p>
+<p>Generalized linear models relate an outcome mean to predictors while
+allowing response distributions such as binomial or Poisson. The
+<em>fastglm</em> package performs the fitting calculations in C++ and
+provides several ways to solve the weighted regressions used during
+fitting. <em>fastglm</em> is compatible with <code>R</code>’s
+<code>family</code> objects (see <code>?family</code>). The package can
+be installed via</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>pak<span class="sc">::</span><span class="fu">pak</span>(<span class="st">&quot;fastglm&quot;</span>)</span>
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="co"># pak::pak(&quot;jaredhuling/fastglm&quot;) #development version</span></span></code></pre></div>
 <p>and loaded via:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(fastglm)</span></code></pre></div>
 <div id="example" class="section level2">
 <h2>Example</h2>
-<p>The main package function is <code>fastglm()</code>. Currently,
-<code>fastglm()</code> does not allow for formula-based data input and
-is restricted to matrices. We use the following example to demonstrate
-the usage of <code>fastglm()</code>:</p>
+<p>The main function, <code>fastglm()</code>, accepts either a model
+formula and data frame or a predictor matrix and response vector. A
+matrix is convenient when the predictor columns have already been
+constructed. The following example illustrates that interface:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">data</span>(esoph)</span>
 <span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">model.matrix</span>(<span class="sc">~</span> agegp <span class="sc">+</span> <span class="fu">unclass</span>(tobgp) <span class="sc">+</span> <span class="fu">unclass</span>(alcgp),</span>
 <span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>                  <span class="at">data =</span> esoph)</span>
@@ -371,87 +372,82 @@ the usage of <code>fastglm()</code>:</p>
 <span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>gfit1 <span class="ot">&lt;-</span> <span class="fu">fastglm</span>(<span class="at">x =</span> x, <span class="at">y =</span> y, <span class="at">family =</span> <span class="fu">binomial</span>(<span class="at">link =</span> <span class="st">&quot;cloglog&quot;</span>))</span>
 <span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a></span>
 <span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="fu">summary</span>(gfit1)</span>
-<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="co">#&gt; Call:</span></span>
-<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co">#&gt; fastglm.default(x = x, y = y, family = binomial(link = &quot;cloglog&quot;))</span></span>
-<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co">#&gt; Coefficients:</span></span>
-<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt;                Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
-<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="co">#&gt; (Intercept)    -4.29199    0.29777 -14.414  &lt; 2e-16 ***</span></span>
-<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="co">#&gt; agegp.L         3.30677    0.63454   5.211 1.88e-07 ***</span></span>
-<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a><span class="co">#&gt; agegp.Q        -1.35525    0.57310  -2.365    0.018 *  </span></span>
-<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a><span class="co">#&gt; agegp.C         0.20296    0.43333   0.468    0.640    </span></span>
-<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a><span class="co">#&gt; agegp^4         0.15056    0.29318   0.514    0.608    </span></span>
-<span id="cb3-21"><a href="#cb3-21" tabindex="-1"></a><span class="co">#&gt; agegp^5        -0.23425    0.17855  -1.312    0.190    </span></span>
-<span id="cb3-22"><a href="#cb3-22" tabindex="-1"></a><span class="co">#&gt; unclass(tobgp)  0.33276    0.07285   4.568 4.93e-06 ***</span></span>
-<span id="cb3-23"><a href="#cb3-23" tabindex="-1"></a><span class="co">#&gt; unclass(alcgp)  0.80384    0.07538  10.664  &lt; 2e-16 ***</span></span>
-<span id="cb3-24"><a href="#cb3-24" tabindex="-1"></a><span class="co">#&gt; ---</span></span>
-<span id="cb3-25"><a href="#cb3-25" tabindex="-1"></a><span class="co">#&gt; Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</span></span>
-<span id="cb3-26"><a href="#cb3-26" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb3-27"><a href="#cb3-27" tabindex="-1"></a><span class="co">#&gt; (Dispersion parameter for binomial family taken to be 1)</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co">#&gt; Generalized linear model</span></span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co">#&gt; Call:</span></span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="co">#&gt; fastglm.default(x = x, y = y, family = binomial(link = &quot;cloglog&quot;))</span></span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co">#&gt; Family: binomial (cloglog link)</span></span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="co">#&gt; Coefficients:</span></span>
+<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="co">#&gt;                Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
+<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a><span class="co">#&gt; (Intercept)    -4.29199    0.29777 -14.414   &lt;1e-04 ***</span></span>
+<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a><span class="co">#&gt; agegp.L         3.30677    0.63456   5.211   &lt;1e-04 ***</span></span>
+<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a><span class="co">#&gt; agegp.Q        -1.35525    0.57311  -2.365    0.018 *  </span></span>
+<span id="cb3-21"><a href="#cb3-21" tabindex="-1"></a><span class="co">#&gt; agegp.C         0.20296    0.43334   0.468    0.640    </span></span>
+<span id="cb3-22"><a href="#cb3-22" tabindex="-1"></a><span class="co">#&gt; agegp^4         0.15056    0.29318   0.514    0.608    </span></span>
+<span id="cb3-23"><a href="#cb3-23" tabindex="-1"></a><span class="co">#&gt; agegp^5        -0.23425    0.17855  -1.312    0.190    </span></span>
+<span id="cb3-24"><a href="#cb3-24" tabindex="-1"></a><span class="co">#&gt; unclass(tobgp)  0.33276    0.07285   4.568   &lt;1e-04 ***</span></span>
+<span id="cb3-25"><a href="#cb3-25" tabindex="-1"></a><span class="co">#&gt; unclass(alcgp)  0.80384    0.07538  10.664   &lt;1e-04 ***</span></span>
+<span id="cb3-26"><a href="#cb3-26" tabindex="-1"></a><span class="co">#&gt; ---</span></span>
+<span id="cb3-27"><a href="#cb3-27" tabindex="-1"></a><span class="co">#&gt; Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</span></span>
 <span id="cb3-28"><a href="#cb3-28" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb3-29"><a href="#cb3-29" tabindex="-1"></a><span class="co">#&gt;     Null deviance: 61.609  on 87  degrees of freedom</span></span>
-<span id="cb3-30"><a href="#cb3-30" tabindex="-1"></a><span class="co">#&gt; Residual deviance: 96.950  on 80  degrees of freedom</span></span>
-<span id="cb3-31"><a href="#cb3-31" tabindex="-1"></a><span class="co">#&gt; AIC: 228</span></span>
-<span id="cb3-32"><a href="#cb3-32" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb3-33"><a href="#cb3-33" tabindex="-1"></a><span class="co">#&gt; Number of Fisher Scoring iterations: 6</span></span></code></pre></div>
-<p>Alternatively, to use the built-in function of <code>glm()</code> for
-processing formulas and data frames, we can use <code>glm()</code> with
-<code>method = fastglm_fit</code> to call the <em>fastglm</em> fitting
-functionality:</p>
+<span id="cb3-29"><a href="#cb3-29" tabindex="-1"></a><span class="co">#&gt;  Dispersion Null deviance Null df Deviance Residual df AIC</span></span>
+<span id="cb3-30"><a href="#cb3-30" tabindex="-1"></a><span class="co">#&gt;           1           368      87    96.95          80 228</span></span>
+<span id="cb3-31"><a href="#cb3-31" tabindex="-1"></a><span class="co">#&gt; Convergence: converged (6 iterations)</span></span></code></pre></div>
+<p>A formula can be passed directly to <code>fastglm()</code>. The
+fitting routine can also be used inside <code>glm()</code> by supplying
+<code>method = fastglm_fit</code>, which is useful when existing
+analysis code already uses <code>glm()</code>:</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>gfit2 <span class="ot">&lt;-</span> <span class="fu">glm</span>(<span class="fu">cbind</span>(ncases, ncontrols) <span class="sc">~</span> agegp <span class="sc">+</span> <span class="fu">unclass</span>(tobgp) <span class="sc">+</span></span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>                 <span class="fu">unclass</span>(alcgp), <span class="at">data =</span> esoph,</span>
 <span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>             <span class="at">family =</span> <span class="fu">binomial</span>(<span class="at">link =</span> <span class="st">&quot;cloglog&quot;</span>),</span>
 <span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>             <span class="at">method =</span> fastglm_fit)</span>
 <span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a></span>
-<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="fu">summary</span>(gfit2, <span class="at">refit =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt; Call:</span></span>
-<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt; glm(formula = cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) + </span></span>
-<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt;     unclass(alcgp), family = binomial(link = &quot;cloglog&quot;), data = esoph, </span></span>
-<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;     method = fastglm_fit)</span></span>
-<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co">#&gt; Coefficients:</span></span>
-<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt;                Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
-<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a><span class="co">#&gt; (Intercept)    -4.29199    0.29777 -14.414  &lt; 2e-16 ***</span></span>
-<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a><span class="co">#&gt; agegp.L         3.30677    0.63454   5.211 1.88e-07 ***</span></span>
-<span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt; agegp.Q        -1.35525    0.57310  -2.365    0.018 *  </span></span>
-<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt; agegp.C         0.20296    0.43333   0.468    0.640    </span></span>
-<span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a><span class="co">#&gt; agegp^4         0.15056    0.29318   0.514    0.608    </span></span>
-<span id="cb4-20"><a href="#cb4-20" tabindex="-1"></a><span class="co">#&gt; agegp^5        -0.23425    0.17855  -1.312    0.190    </span></span>
-<span id="cb4-21"><a href="#cb4-21" tabindex="-1"></a><span class="co">#&gt; unclass(tobgp)  0.33276    0.07285   4.568 4.93e-06 ***</span></span>
-<span id="cb4-22"><a href="#cb4-22" tabindex="-1"></a><span class="co">#&gt; unclass(alcgp)  0.80384    0.07538  10.664  &lt; 2e-16 ***</span></span>
-<span id="cb4-23"><a href="#cb4-23" tabindex="-1"></a><span class="co">#&gt; ---</span></span>
-<span id="cb4-24"><a href="#cb4-24" tabindex="-1"></a><span class="co">#&gt; Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</span></span>
-<span id="cb4-25"><a href="#cb4-25" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb4-26"><a href="#cb4-26" tabindex="-1"></a><span class="co">#&gt; (Dispersion parameter for binomial family taken to be 1)</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="fu">summary</span>(gfit2)</span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="co">#&gt; Generalized linear model</span></span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt; Call:</span></span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt; glm(formula = cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) + </span></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;     unclass(alcgp), family = binomial(link = &quot;cloglog&quot;), data = esoph, </span></span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="co">#&gt;     method = fastglm_fit)</span></span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co">#&gt; Family: binomial (cloglog link)</span></span>
+<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a><span class="co">#&gt; Coefficients:</span></span>
+<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a><span class="co">#&gt;                Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
+<span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt; (Intercept)    -4.29199    0.29777 -14.414   &lt;1e-04 ***</span></span>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt; agegp.L         3.30677    0.63456   5.211   &lt;1e-04 ***</span></span>
+<span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a><span class="co">#&gt; agegp.Q        -1.35525    0.57311  -2.365    0.018 *  </span></span>
+<span id="cb4-20"><a href="#cb4-20" tabindex="-1"></a><span class="co">#&gt; agegp.C         0.20296    0.43334   0.468    0.640    </span></span>
+<span id="cb4-21"><a href="#cb4-21" tabindex="-1"></a><span class="co">#&gt; agegp^4         0.15056    0.29318   0.514    0.608    </span></span>
+<span id="cb4-22"><a href="#cb4-22" tabindex="-1"></a><span class="co">#&gt; agegp^5        -0.23425    0.17855  -1.312    0.190    </span></span>
+<span id="cb4-23"><a href="#cb4-23" tabindex="-1"></a><span class="co">#&gt; unclass(tobgp)  0.33276    0.07285   4.568   &lt;1e-04 ***</span></span>
+<span id="cb4-24"><a href="#cb4-24" tabindex="-1"></a><span class="co">#&gt; unclass(alcgp)  0.80384    0.07538  10.664   &lt;1e-04 ***</span></span>
+<span id="cb4-25"><a href="#cb4-25" tabindex="-1"></a><span class="co">#&gt; ---</span></span>
+<span id="cb4-26"><a href="#cb4-26" tabindex="-1"></a><span class="co">#&gt; Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</span></span>
 <span id="cb4-27"><a href="#cb4-27" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb4-28"><a href="#cb4-28" tabindex="-1"></a><span class="co">#&gt;     Null deviance: 367.95  on 87  degrees of freedom</span></span>
-<span id="cb4-29"><a href="#cb4-29" tabindex="-1"></a><span class="co">#&gt; Residual deviance:  96.95  on 80  degrees of freedom</span></span>
-<span id="cb4-30"><a href="#cb4-30" tabindex="-1"></a><span class="co">#&gt; AIC: 1099.6</span></span>
-<span id="cb4-31"><a href="#cb4-31" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb4-32"><a href="#cb4-32" tabindex="-1"></a><span class="co">#&gt; Number of Fisher Scoring iterations: 6</span></span></code></pre></div>
-<p>Setting <code>refit = FALSE</code> in <code>summary()</code> uses the
-standard errors computed by the internal fitting functions of
-<em>fastglm</em>. The default, <code>refit = TRUE</code>, re-fits the
-model using <code>glm()</code> with <code>method = &quot;glm.fit&quot;</code> and
-one IRLS iteration with the coefficients computed previously as the
-starting values.</p>
+<span id="cb4-28"><a href="#cb4-28" tabindex="-1"></a><span class="co">#&gt;  Dispersion Null deviance Null df Deviance Residual df AIC</span></span>
+<span id="cb4-29"><a href="#cb4-29" tabindex="-1"></a><span class="co">#&gt;           1           368      87    96.95          80 228</span></span>
+<span id="cb4-30"><a href="#cb4-30" tabindex="-1"></a><span class="co">#&gt; Convergence: converged (6 iterations)</span></span></code></pre></div>
+<p>The coefficient summary uses the covariance calculated during
+fitting, evaluated at the reported coefficient estimates. It therefore
+obtains standard errors without fitting the model again.</p>
 </div>
 <div id="computational-stability" class="section level2">
 <h2>Computational stability</h2>
-<p><em>fastglm</em> does not compromise computational stability for
-speed. In fact, for many situations where <code>glm()</code> and even
-<code>glm2::glm2()</code> do not converge, <code>fastglm()</code> does
-converge.</p>
-<p>As an example, consider the following data scenario, where the
-response distribution is (mildly) misspecified, but the link function is
-quite badly misspecified. In such scenarios, the standard IRLS algorithm
-tends to have convergence issues. The <em>glm2</em> package was designed
-to handle such cases, however, it still can have convergence issues.
-<em>fastglm</em> uses a similar step-halving technique as
-<code>glm2::glm2()</code>, but it starts at better initialized values
-and thus tends to have better convergence properties in practice.</p>
+<p>A GLM is usually fitted through a sequence of weighted regression
+updates, called iteratively reweighted least squares (IRLS). An update
+can increase the discrepancy between the fitted and observed outcomes or
+produce means outside the distribution’s allowed range. The
+<em>fastglm</em> safeguards shorten such steps until an acceptable
+update is found. This step-halving procedure can improve convergence,
+although difficult models can still fail.</p>
+<p>The following example deliberately fits an inappropriate link, the
+function relating the response mean to the linear predictor. It
+illustrates numerical difficulties that can arise when proposed means
+leave the allowed range. Different starting values and step safeguards
+can lead to different convergence behavior. Numerical convergence alone
+does not make the chosen response distribution or link scientifically
+appropriate.</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
 <span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">rnorm</span>(<span class="dv">10000</span> <span class="sc">*</span> <span class="dv">100</span>), <span class="at">ncol =</span> <span class="dv">100</span>)</span>
 <span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">exp</span>(<span class="fl">0.25</span> <span class="sc">*</span> x[,<span class="dv">1</span>] <span class="sc">-</span> <span class="fl">0.25</span> <span class="sc">*</span> x[,<span class="dv">3</span>] <span class="sc">+</span> <span class="fl">0.5</span> <span class="sc">*</span> x[,<span class="dv">4</span>] <span class="sc">-</span> <span class="fl">0.5</span> <span class="sc">*</span> x[,<span class="dv">5</span>] <span class="sc">+</span> <span class="fu">rnorm</span>(<span class="dv">10000</span>)) <span class="sc">+</span> <span class="fl">0.1</span></span>
@@ -461,18 +457,18 @@ and thus tends to have better convergence properties in practice.</p>
 <span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="fu">system.time</span>(gfit1 <span class="ot">&lt;-</span> <span class="fu">glm</span>(y <span class="sc">~</span> x, <span class="at">family =</span> <span class="fu">Gamma</span>(<span class="at">link =</span> <span class="st">&quot;sqrt&quot;</span>),</span>
 <span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>                         <span class="at">method =</span> fastglm_fit))</span>
 <span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt;   0.306   0.011   0.319</span></span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt;   0.299   0.007   0.307</span></span>
 <span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a></span>
 <span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co"># glm</span></span>
 <span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a><span class="fu">system.time</span>(gfit2 <span class="ot">&lt;-</span> <span class="fu">glm</span>(y <span class="sc">~</span> x, <span class="at">family =</span> <span class="fu">Gamma</span>(<span class="at">link =</span> <span class="st">&quot;sqrt&quot;</span>)))</span>
 <span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="co">#&gt;   1.625   0.052   1.679</span></span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="co">#&gt;   1.566   0.035   1.603</span></span>
 <span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a></span>
 <span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="co"># glm2</span></span>
 <span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="fu">system.time</span>(gfit3 <span class="ot">&lt;-</span> <span class="fu">glm</span>(y <span class="sc">~</span> x, <span class="at">family =</span> <span class="fu">Gamma</span>(<span class="at">link =</span> <span class="st">&quot;sqrt&quot;</span>),</span>
 <span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a>                         <span class="at">method =</span> glm2<span class="sc">::</span>glm.fit2))</span>
 <span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt;   1.153   0.042   1.199</span></span>
+<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt;   1.125   0.029   1.155</span></span>
 <span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a></span>
 <span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a><span class="do">## Note that fastglm() returns estimates with the</span></span>
 <span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a><span class="do">## largest likelihood</span></span>
@@ -517,7 +513,7 @@ and thus tends to have better convergence properties in practice.</p>
 <span id="cb5-63"><a href="#cb5-63" tabindex="-1"></a><span class="fu">system.time</span>(gfit2 <span class="ot">&lt;-</span> <span class="fu">glm</span>(y <span class="sc">~</span> x, <span class="at">family =</span> <span class="fu">Gamma</span>(<span class="at">link =</span> <span class="st">&quot;sqrt&quot;</span>),</span>
 <span id="cb5-64"><a href="#cb5-64" tabindex="-1"></a>                         <span class="at">control =</span> <span class="fu">list</span>(<span class="at">maxit =</span> <span class="dv">100</span>)))</span>
 <span id="cb5-65"><a href="#cb5-65" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-66"><a href="#cb5-66" tabindex="-1"></a><span class="co">#&gt;   6.175   0.203   6.402</span></span>
+<span id="cb5-66"><a href="#cb5-66" tabindex="-1"></a><span class="co">#&gt;   5.923   0.131   6.063</span></span>
 <span id="cb5-67"><a href="#cb5-67" tabindex="-1"></a></span>
 <span id="cb5-68"><a href="#cb5-68" tabindex="-1"></a>gfit2<span class="sc">$</span>converged</span>
 <span id="cb5-69"><a href="#cb5-69" tabindex="-1"></a><span class="co">#&gt; [1] FALSE</span></span>

@@ -12,9 +12,8 @@
 
 <meta name="author" content="Jared Huling" />
 
-<meta name="date" content="2026-08-26" />
 
-<title>Negative-Binomial, Hurdle, and Zero-Inflation with ‘fastglm’</title>
+<title>Count regression, truncation, and excess zeros with fastglm</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -339,262 +338,443 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<h1 class="title toc-ignore">Negative-Binomial, Hurdle, and
-Zero-Inflation with ‘fastglm’</h1>
+<h1 class="title toc-ignore">Count regression, truncation, and excess
+zeros with fastglm</h1>
 <h4 class="author">Jared Huling</h4>
-<h4 class="date">2026-08-26</h4>
 
 
 
-<p>Beyond <code>family</code>-driven GLMs, <em>fastglm</em> has fitting
-functions for three count-data model types that arise often in practice
-but require model-specific machinery on top of the standard IRLS
-solver:</p>
-<ul>
-<li><strong><code>fastglm_nb()</code></strong> — negative-binomial
-regression with the dispersion <code>theta</code> estimated jointly with
-the regression coefficients, in the spirit of
-<code>MASS::glm.nb()</code>.</li>
-<li><strong><code>fastglm_hurdle()</code></strong> — a two-part count
-model with a binary zero / non-zero component and a zero-truncated
-Poisson or NB count component, the same model as
-<code>pscl::hurdle()</code>.</li>
-<li><strong><code>fastglm_zi()</code></strong> — a zero-inflated Poisson
-or NB regression, with a binary inflation component layered on the
-original (untruncated) count distribution, the same model as
-<code>pscl::zeroinfl()</code>.</li>
-</ul>
-<p>All three reuse the same C++ IRLS solver as <code>fastglm()</code>
-itself; the outer iteration (joint NB MLE, the EM loop in
-zero-inflation, the inner theta-Brent for unknown-<code>theta</code> NB
-hurdle / ZI) likewise lives in C++. Cameron and Trivedi (1998) is the
-standard textbook reference for the count-data theory underlying this
-vignette, and Zeileis, Kleiber, and Jackman (2008) gives the
-<em>pscl</em> implementation we benchmark against.</p>
+<p>Counts can exhibit variation beyond that allowed by a Poisson model,
+and the process generating a zero may differ from the process
+determining a positive count. These features motivate negative-binomial,
+hurdle, and zero-inflated models. We describe their mean structures and
+use predictions to distinguish the quantities they estimate.</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(fastglm)</span>
-<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">suppressPackageStartupMessages</span>({</span>
-<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>    <span class="fu">library</span>(MASS)        <span class="co"># glm.nb, rnegbin</span></span>
-<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>    <span class="fu">library</span>(pscl)        <span class="co"># hurdle, zeroinfl, bioChemists</span></span>
-<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>    <span class="fu">library</span>(microbenchmark)</span>
-<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a>})</span></code></pre></div>
-<div id="negative-binomial-regression" class="section level1">
-<h1>Negative-binomial regression</h1>
-<p><code>fastglm_nb()</code> is a drop-in alternative to
-<code>MASS::glm.nb()</code> (Venables and Ripley, 2002) for the NB2
-model with <code>Var(Y) = mu + mu^2 / theta</code>. Both
-<code>theta</code> and <code>beta</code> are estimated by maximum
-likelihood, alternating an IRLS update for <code>beta</code> at fixed
-<code>theta</code> with a 1-D Brent root-find for <code>theta</code> at
-fixed <code>beta</code>. Both loops run in C++.</p>
-<p>A small-sample comparison on <code>MASS::quine</code> (school
-absences):</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">data</span>(quine)</span>
-<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>X <span class="ot">&lt;-</span> <span class="fu">model.matrix</span>(<span class="sc">~</span> Eth <span class="sc">+</span> Sex <span class="sc">+</span> Age <span class="sc">+</span> Lrn, <span class="at">data =</span> quine)</span>
-<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>y <span class="ot">&lt;-</span> quine<span class="sc">$</span>Days</span>
-<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a></span>
-<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>fit_f <span class="ot">&lt;-</span> <span class="fu">fastglm_nb</span>(X, y)</span>
-<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>fit_m <span class="ot">&lt;-</span> MASS<span class="sc">::</span><span class="fu">glm.nb</span>(Days <span class="sc">~</span> Eth <span class="sc">+</span> Sex <span class="sc">+</span> Age <span class="sc">+</span> Lrn, <span class="at">data =</span> quine)</span>
-<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a></span>
-<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="fu">c</span>(<span class="at">theta_fastglm =</span> fit_f<span class="sc">$</span>theta, <span class="at">theta_glm.nb =</span> fit_m<span class="sc">$</span>theta)</span>
-<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt; theta_fastglm  theta_glm.nb </span></span>
-<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt;      1.274893      1.274893</span></span>
-<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a></span>
-<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">abs</span>(<span class="fu">unname</span>(<span class="fu">coef</span>(fit_f)) <span class="sc">-</span> <span class="fu">unname</span>(<span class="fu">coef</span>(fit_m))))</span>
-<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a><span class="co">#&gt; [1] 3.06728e-08</span></span>
-<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a><span class="fu">abs</span>(<span class="fu">as.numeric</span>(<span class="fu">logLik</span>(fit_f)) <span class="sc">-</span> <span class="fu">as.numeric</span>(<span class="fu">logLik</span>(fit_m)))</span>
-<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="co">#&gt; [1] 2.273737e-13</span></span></code></pre></div>
-<p>Coefficients and <code>theta</code> agree to roughly 1e-8 on the same
-MLE.</p>
-<p>A timing comparison, on a moderately sized simulated
-NB(<code>theta = 2</code>) example:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>n  <span class="ot">&lt;-</span> <span class="fl">5e4</span></span>
-<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>X  <span class="ot">&lt;-</span> <span class="fu">cbind</span>(<span class="dv">1</span>, <span class="fu">matrix</span>(<span class="fu">rnorm</span>(n <span class="sc">*</span> <span class="dv">3</span>), n, <span class="dv">3</span>))</span>
-<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>mu <span class="ot">&lt;-</span> <span class="fu">exp</span>(X <span class="sc">%*%</span> <span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.4</span>, <span class="sc">-</span><span class="fl">0.2</span>, <span class="fl">0.3</span>))</span>
-<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>y  <span class="ot">&lt;-</span> MASS<span class="sc">::</span><span class="fu">rnegbin</span>(n, <span class="at">mu =</span> mu, <span class="at">theta =</span> <span class="dv">2</span>)</span>
-<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>df <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">y =</span> y, <span class="at">x1 =</span> X[, <span class="dv">2</span>], <span class="at">x2 =</span> X[, <span class="dv">3</span>], <span class="at">x3 =</span> X[, <span class="dv">4</span>])</span>
-<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a></span>
-<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>mb_nb <span class="ot">&lt;-</span> <span class="fu">microbenchmark</span>(</span>
-<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>    <span class="at">fastglm_nb =</span> <span class="fu">fastglm_nb</span>(X, y),</span>
-<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>    <span class="at">glm.nb     =</span> MASS<span class="sc">::</span><span class="fu">glm.nb</span>(y <span class="sc">~</span> x1 <span class="sc">+</span> x2 <span class="sc">+</span> x3, <span class="at">data =</span> df),</span>
-<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a>    <span class="at">times =</span> <span class="dv">5</span><span class="dt">L</span></span>
-<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a>)</span>
-<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="fu">print</span>(mb_nb)</span>
-<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co">#&gt; Unit: milliseconds</span></span>
-<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt;        expr       min       lq      mean    median        uq       max neval</span></span>
-<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="co">#&gt;  fastglm_nb  40.28939  40.7235  52.77354  41.55735  43.19489  98.10259     5</span></span>
-<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="co">#&gt;      glm.nb 290.36298 346.8598 359.48409 352.39361 397.11243 410.69167     5</span></span>
-<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a><span class="co">#&gt;  cld</span></span>
-<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a><span class="co">#&gt;   a </span></span>
-<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a><span class="co">#&gt;    b</span></span></code></pre></div>
-<p>The native NB family kernel is also exposed directly through
-<code>negbin(theta, link)</code> for the case when <code>theta</code> is
-known (or estimated separately). Holding <code>theta</code> fixed at the
-joint MLE recovers the <code>fastglm_nb()</code> regression coefficients
-exactly, since <code>fastglm_nb()</code> is just IRLS at the converged
-<code>theta</code>:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>fit_joint <span class="ot">&lt;-</span> <span class="fu">fastglm_nb</span>(X, y)</span>
-<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>fit_known <span class="ot">&lt;-</span> <span class="fu">fastglm</span>(X, y, <span class="at">family =</span> <span class="fu">negbin</span>(<span class="at">theta =</span> fit_joint<span class="sc">$</span>theta, <span class="at">link =</span> <span class="st">&quot;log&quot;</span>))</span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">abs</span>(<span class="fu">unname</span>(<span class="fu">coef</span>(fit_known)) <span class="sc">-</span> <span class="fu">unname</span>(<span class="fu">coef</span>(fit_joint))))</span>
-<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="co">#&gt; [1] 1.624216e-07</span></span></code></pre></div>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">544</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>d <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">x=</span><span class="fu">rnorm</span>(<span class="dv">500</span>), <span class="at">exposure=</span><span class="fu">runif</span>(<span class="dv">500</span>,.<span class="dv">8</span>,<span class="fl">1.2</span>))</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>d<span class="sc">$</span>y <span class="ot">&lt;-</span> <span class="fu">rnbinom</span>(<span class="dv">500</span>,<span class="at">mu=</span>d<span class="sc">$</span>exposure<span class="sc">*</span><span class="fu">exp</span>(.<span class="dv">3</span><span class="fl">+.5</span><span class="sc">*</span>d<span class="sc">$</span>x),<span class="at">size=</span><span class="fl">1.5</span>)</span></code></pre></div>
+<div id="negative-binomial-variation" class="section level1">
+<h1>Negative-binomial variation</h1>
+<p>The negative-binomial model used here, often called NB2, has variance
+<span class="math inline">\(\mu+\mu^2/\theta\)</span>, where larger
+<span class="math inline">\(\theta\)</span> corresponds to less
+overdispersion. <code>fastglm_nb()</code> alternates between estimating
+the regression coefficients with <span class="math inline">\(\theta\)</span> held fixed and estimating <span class="math inline">\(\theta\)</span> with the fitted means held fixed.
+A fixed value of <span class="math inline">\(\theta\)</span> can instead
+be supplied through <code>negbin(theta)</code>.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>X <span class="ot">&lt;-</span> <span class="fu">model.matrix</span>(<span class="sc">~</span>x,d)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>nb <span class="ot">&lt;-</span> <span class="fu">fastglm_nb</span>(X,d<span class="sc">$</span>y,<span class="at">offset=</span><span class="fu">log</span>(d<span class="sc">$</span>exposure))</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="fu">c</span>(<span class="at">theta=</span>nb<span class="sc">$</span>theta,<span class="at">SE.theta=</span>nb<span class="sc">$</span>SE.theta)</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt;     theta  SE.theta </span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt; 1.5243381 0.2398187</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="fu">summary</span>(nb)</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co">#&gt; Negative-binomial regression</span></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt; Call:</span></span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt; fastglm_nb(x = X, y = d$y, offset = log(d$exposure))</span></span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="co">#&gt; Family: Negative Binomial(1.5243) (log link)</span></span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a><span class="co">#&gt; Coefficients:</span></span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a><span class="co">#&gt;             Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="co">#&gt; (Intercept)  0.25871    0.05441   4.755   &lt;1e-04 ***</span></span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a><span class="co">#&gt; x            0.37117    0.05316   6.983   &lt;1e-04 ***</span></span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a><span class="co">#&gt; ---</span></span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a><span class="co">#&gt; Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</span></span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a><span class="co">#&gt;  Dispersion Null deviance Null df Deviance Residual df  AIC</span></span>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a><span class="co">#&gt;           1         580.8     499    530.6         498 1570</span></span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a><span class="co">#&gt;  Theta Std. Error</span></span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a><span class="co">#&gt;  1.524     0.2398</span></span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a><span class="co">#&gt; Convergence: converged (10 iterations)</span></span></code></pre></div>
+<p>For a fixed-theta family, the negative-binomial likelihood is fully
+specified and its scale parameter is one. When theta is estimated,
+<code>SE.theta</code> accounts for estimating the coefficients at the
+same time. The default coefficient covariance retains the conventional
+GLM calculation with theta fixed; <code>vcov(nb, full=TRUE)</code>
+instead returns the joint covariance obtained from the observed
+likelihood curvature for coefficients and theta. The estimated theta in
+<code>fastglm_nb()</code> contributes an additional parameter to AIC.
+<code>fastglm_confint_theta()</code> obtains an interval by holding
+theta at a sequence of candidate values and refitting the coefficients.
+The resulting profile likelihood measures how well each candidate fits
+after allowing the coefficients to adjust. The interval retains theta
+values that are not rejected by a likelihood-ratio comparison. Its upper
+endpoint can be infinite when the data remain compatible with the
+Poisson limit, in which theta grows without bound.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">fastglm_confint_theta</span>(nb)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="co">#&gt;    lower    upper </span></span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="co">#&gt; 1.136223 2.114785 </span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="co">#&gt; attr(,&quot;level&quot;)</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a><span class="co">#&gt; [1] 0.95</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co">#&gt; attr(,&quot;profile&quot;)</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="co">#&gt;       theta    logLik</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="co">#&gt; 1  1.524338 -782.0222</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt; 2  0.762169 -793.9905</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co">#&gt; 3  0.762169 -793.9905</span></span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="co">#&gt; 4  1.524338 -782.0222</span></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co">#&gt; 5  1.363864 -782.2817</span></span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="co">#&gt; 6  1.019556 -785.7401</span></span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co">#&gt; 7  1.185980 -783.4048</span></span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt; 8  1.126418 -784.0633</span></span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="co">#&gt; 9  1.137083 -783.9326</span></span>
+<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="co">#&gt; 10 1.136237 -783.9427</span></span>
+<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a><span class="co">#&gt; 11 1.136223 -783.9429</span></span>
+<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a><span class="co">#&gt; 12 1.136229 -783.9428</span></span>
+<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a><span class="co">#&gt; 13 1.136223 -783.9429</span></span>
+<span id="cb3-21"><a href="#cb3-21" tabindex="-1"></a><span class="co">#&gt; 14 1.524338 -782.0222</span></span>
+<span id="cb3-22"><a href="#cb3-22" tabindex="-1"></a><span class="co">#&gt; 15 3.048676 -789.4464</span></span>
+<span id="cb3-23"><a href="#cb3-23" tabindex="-1"></a><span class="co">#&gt; 16 1.524338 -782.0222</span></span>
+<span id="cb3-24"><a href="#cb3-24" tabindex="-1"></a><span class="co">#&gt; 17 3.048676 -789.4464</span></span>
+<span id="cb3-25"><a href="#cb3-25" tabindex="-1"></a><span class="co">#&gt; 18 1.823730 -782.6314</span></span>
+<span id="cb3-26"><a href="#cb3-26" tabindex="-1"></a><span class="co">#&gt; 19 2.357957 -785.2901</span></span>
+<span id="cb3-27"><a href="#cb3-27" tabindex="-1"></a><span class="co">#&gt; 20 2.070129 -783.7144</span></span>
+<span id="cb3-28"><a href="#cb3-28" tabindex="-1"></a><span class="co">#&gt; 21 2.117989 -783.9596</span></span>
+<span id="cb3-29"><a href="#cb3-29" tabindex="-1"></a><span class="co">#&gt; 22 2.114698 -783.9424</span></span>
+<span id="cb3-30"><a href="#cb3-30" tabindex="-1"></a><span class="co">#&gt; 23 2.114785 -783.9429</span></span>
+<span id="cb3-31"><a href="#cb3-31" tabindex="-1"></a><span class="co">#&gt; 24 2.114795 -783.9429</span></span>
+<span id="cb3-32"><a href="#cb3-32" tabindex="-1"></a><span class="co">#&gt; 25 2.114785 -783.9429</span></span></code></pre></div>
 </div>
-<div id="hurdle-models" class="section level1">
-<h1>Hurdle models</h1>
-<p>Hurdle models, introduced by Mullahy (1986), factorize a count
-distribution into two independent pieces:</p>
-<ul>
-<li>a binary regression for <code>1(y &gt; 0)</code> over the full
-sample (the <em>zero</em> part);</li>
-<li>a zero-truncated Poisson or NB regression for <code>y &gt; 0</code>
-over the positive subset (the <em>count</em> part).</li>
-</ul>
-<p>Because the two parts share no parameters, the joint likelihood
-factorizes and they can be fit independently. <em>fastglm</em>’s C++
-driver fits both parts using the same IRLS solver as
-<code>fastglm()</code>, with new <code>FAM_POIS_TRUNC_*</code> /
-<code>FAM_NB_TRUNC_*</code> family codes that handle the truncation
-correction stably (<code>expm1</code>, <code>log1p</code> near
-<code>mu = 0</code>).</p>
-<p>The formula uses the <em>Formula</em> package convention
-<code>y ~ x1 + x2 | z1 + z2</code>; the right-hand side after
-<code>|</code> specifies the zero-part design (it defaults to the
-count-part design if absent).</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">data</span>(bioChemists, <span class="at">package =</span> <span class="st">&quot;pscl&quot;</span>)</span>
-<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>fit_f <span class="ot">&lt;-</span> <span class="fu">fastglm_hurdle</span>(art <span class="sc">~</span> ., <span class="at">data =</span> bioChemists, <span class="at">dist =</span> <span class="st">&quot;poisson&quot;</span>)</span>
-<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>fit_p <span class="ot">&lt;-</span> pscl<span class="sc">::</span><span class="fu">hurdle</span> (art <span class="sc">~</span> ., <span class="at">data =</span> bioChemists, <span class="at">dist =</span> <span class="st">&quot;poisson&quot;</span>)</span>
-<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a></span>
-<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">abs</span>(<span class="fu">unname</span>(<span class="fu">coef</span>(fit_f, <span class="st">&quot;count&quot;</span>)) <span class="sc">-</span> <span class="fu">unname</span>(fit_p<span class="sc">$</span>coefficients<span class="sc">$</span>count)))</span>
-<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="co">#&gt; [1] 3.144497e-07</span></span>
-<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">abs</span>(<span class="fu">unname</span>(<span class="fu">coef</span>(fit_f, <span class="st">&quot;zero&quot;</span>))  <span class="sc">-</span> <span class="fu">unname</span>(fit_p<span class="sc">$</span>coefficients<span class="sc">$</span>zero)))</span>
-<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt; [1] 1.27043e-10</span></span>
-<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="fu">abs</span>(<span class="fu">as.numeric</span>(<span class="fu">logLik</span>(fit_f)) <span class="sc">-</span> <span class="fu">as.numeric</span>(<span class="fu">logLik</span>(fit_p)))</span>
-<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt; [1] 1.07093e-10</span></span></code></pre></div>
-<p><code>coef()</code> and <code>vcov()</code> accept a
-<code>model = c(&quot;full&quot;, &quot;count&quot;, &quot;zero&quot;)</code> argument so each part
-can be inspected separately:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">coef</span>(fit_f, <span class="at">model =</span> <span class="st">&quot;count&quot;</span>)</span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co">#&gt; (Intercept)    femWomen  marMarried        kid5         phd        ment </span></span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt;  0.67113934 -0.22858262  0.09648498 -0.14218724 -0.01272657  0.01874550</span></span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="fu">coef</span>(fit_f, <span class="at">model =</span> <span class="st">&quot;zero&quot;</span>)</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co">#&gt; (Intercept)    femWomen  marMarried        kid5         phd        ment </span></span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="co">#&gt;  0.23679601 -0.25115113  0.32623358 -0.28524872  0.02221940  0.08012135</span></span></code></pre></div>
-<p>For NB count parts, the dispersion is estimated by an inner Brent MLE
-that runs <em>between</em> outer IRLS iterations; the outer-loop
-tolerance is controlled by <code>outer.tol</code> /
-<code>outer.maxit</code>.</p>
-<p>A timing comparison on a 4000-observation simulated example:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">11</span>)</span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>n  <span class="ot">&lt;-</span> <span class="dv">4000</span></span>
-<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>x1 <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(n);  x2 <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(n)</span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>lam    <span class="ot">&lt;-</span> <span class="fu">exp</span>(<span class="fl">0.7</span> <span class="sc">+</span> <span class="fl">0.4</span> <span class="sc">*</span> x1 <span class="sc">-</span> <span class="fl">0.3</span> <span class="sc">*</span> x2)</span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>is_pos <span class="ot">&lt;-</span> <span class="fu">rbinom</span>(n, <span class="dv">1</span>, <span class="fu">plogis</span>(<span class="sc">-</span><span class="fl">0.4</span> <span class="sc">+</span> <span class="fl">0.5</span> <span class="sc">*</span> x1 <span class="sc">+</span> <span class="fl">0.2</span> <span class="sc">*</span> x2))</span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>yt     <span class="ot">&lt;-</span> <span class="fu">integer</span>(n)</span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_len</span>(n)) {</span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>    <span class="cf">repeat</span> { v <span class="ot">&lt;-</span> <span class="fu">rpois</span>(<span class="dv">1</span>, lam[i]); <span class="cf">if</span> (v <span class="sc">&gt;</span> <span class="dv">0</span>) { yt[i] <span class="ot">&lt;-</span> v; <span class="cf">break</span> } }</span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>}</span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>y  <span class="ot">&lt;-</span> <span class="fu">ifelse</span>(is_pos <span class="sc">==</span> <span class="dv">1</span>, yt, <span class="dv">0</span><span class="dt">L</span>)</span>
-<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>df <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">y =</span> y, <span class="at">x1 =</span> x1, <span class="at">x2 =</span> x2)</span>
-<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a></span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a>mb_hurdle <span class="ot">&lt;-</span> <span class="fu">microbenchmark</span>(</span>
-<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a>    <span class="at">fastglm_hurdle =</span> <span class="fu">fastglm_hurdle</span>(y <span class="sc">~</span> x1 <span class="sc">+</span> x2, <span class="at">data =</span> df, <span class="at">dist =</span> <span class="st">&quot;poisson&quot;</span>),</span>
-<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>    <span class="at">pscl_hurdle    =</span> pscl<span class="sc">::</span><span class="fu">hurdle</span> (y <span class="sc">~</span> x1 <span class="sc">+</span> x2, <span class="at">data =</span> df, <span class="at">dist =</span> <span class="st">&quot;poisson&quot;</span>),</span>
-<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a>    <span class="at">times =</span> <span class="dv">5</span><span class="dt">L</span></span>
-<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>)</span>
-<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a><span class="fu">print</span>(mb_hurdle)</span>
-<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="co">#&gt; Unit: milliseconds</span></span>
-<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a><span class="co">#&gt;            expr       min        lq      mean    median        uq       max</span></span>
-<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a><span class="co">#&gt;  fastglm_hurdle  1.281332  1.422659  2.261191  1.442585  2.043358  5.116021</span></span>
-<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a><span class="co">#&gt;     pscl_hurdle 18.315438 18.427204 20.284570 18.536182 22.882182 23.261842</span></span>
-<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a><span class="co">#&gt;  neval cld</span></span>
-<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a><span class="co">#&gt;      5  a </span></span>
-<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a><span class="co">#&gt;      5   b</span></span></code></pre></div>
+<div id="positive-counts-and-hurdle-models" class="section level1">
+<h1>Positive counts and hurdle models</h1>
+<p>A zero-truncated model describes counts conditional on being
+positive. If the underlying count distribution has mean <span class="math inline">\(\mu\)</span> and zero probability <span class="math inline">\(p_0\)</span>, its conditional mean is <span class="math inline">\(\mu/(1-p_0)\)</span>. The regression coefficients
+describe <span class="math inline">\(\log(\mu)\)</span>, whereas
+response predictions report the conditional mean.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>positive <span class="ot">&lt;-</span> <span class="fu">subset</span>(d,y<span class="sc">&gt;</span><span class="dv">0</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>truncated <span class="ot">&lt;-</span> <span class="fu">fastglm_truncated</span>(y<span class="sc">~</span>x<span class="sc">+</span><span class="fu">offset</span>(<span class="fu">log</span>(exposure)),<span class="at">data=</span>positive,</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>                               <span class="at">dist=</span><span class="st">&quot;negbin&quot;</span>)</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="fu">head</span>(<span class="fu">predict</span>(truncated,<span class="at">se.fit=</span><span class="cn">TRUE</span>)<span class="sc">$</span>fit)</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="co">#&gt;        1        3        4        6        7       13 </span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="co">#&gt; 1.916825 2.666691 3.908014 1.983223 3.253662 2.363961</span></span></code></pre></div>
+<p>A hurdle model additionally estimates <span class="math inline">\(\pi=\Pr(Y&gt;0)\)</span>, giving marginal mean
+<span class="math inline">\(\pi\mu/(1-p_0)\)</span>. Its likelihood
+separates into a binary component and a positive-count component. Within
+the positive-count component, the regression coefficients and theta are
+estimated from the same outcomes and their estimation errors can be
+related. The covariance calculation therefore uses the curvature of
+their joint log likelihood, called the observed information. This
+accounts for uncertainty in theta when reporting coefficient standard
+errors.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>hurdle <span class="ot">&lt;-</span> <span class="fu">fastglm_hurdle</span>(y<span class="sc">~</span>x<span class="sc">+</span><span class="fu">offset</span>(<span class="fu">log</span>(exposure))<span class="sc">|</span>x,<span class="at">data=</span>d,<span class="at">dist=</span><span class="st">&quot;negbin&quot;</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="fu">summary</span>(hurdle)</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="co">#&gt; Hurdle regression</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a><span class="co">#&gt; Call:</span></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="co">#&gt; fastglm_hurdle(formula = y ~ x + offset(log(exposure)) | x, data = d, </span></span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co">#&gt;     dist = &quot;negbin&quot;)</span></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt; Coefficients:</span></span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt;                   Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="co">#&gt; count_(Intercept)  0.30076    0.11648   2.582  0.00982 ** </span></span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co">#&gt; count_x            0.36578    0.07098   5.153  &lt; 1e-04 ***</span></span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a><span class="co">#&gt; zero_(Intercept)   0.42498    0.09362   4.540  &lt; 1e-04 ***</span></span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a><span class="co">#&gt; zero_x             0.41755    0.09699   4.305  &lt; 1e-04 ***</span></span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="co">#&gt; ---</span></span>
+<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a><span class="co">#&gt; Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</span></span>
+<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="co">#&gt;  Theta Std. Error</span></span>
+<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a><span class="co">#&gt;  1.746     0.6344</span></span>
+<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a><span class="co">#&gt; Log-likelihood: -782.1</span></span>
+<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt; Observations: 500</span></span>
+<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a><span class="co">#&gt; Convergence: converged</span></span>
+<span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a><span class="fu">predict</span>(hurdle,<span class="at">newdata=</span>d[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>,],<span class="at">type=</span><span class="st">&quot;response&quot;</span>,<span class="at">se.fit=</span><span class="cn">TRUE</span>)</span>
+<span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a><span class="co">#&gt; Predictions with standard errors</span></span>
+<span id="cb5-25"><a href="#cb5-25" tabindex="-1"></a><span class="co">#&gt; Scale: response mean</span></span>
+<span id="cb5-26"><a href="#cb5-26" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-27"><a href="#cb5-27" tabindex="-1"></a><span class="co">#&gt;  Row Estimate Std. Error</span></span>
+<span id="cb5-28"><a href="#cb5-28" tabindex="-1"></a><span class="co">#&gt;    1   1.1480    0.06080</span></span>
+<span id="cb5-29"><a href="#cb5-29" tabindex="-1"></a><span class="co">#&gt;    2   0.4857    0.08546</span></span>
+<span id="cb5-30"><a href="#cb5-30" tabindex="-1"></a><span class="co">#&gt;    3   1.7494    0.10545</span></span>
+<span id="cb5-31"><a href="#cb5-31" tabindex="-1"></a><span class="co">#&gt;    4   3.0366    0.35039</span></span>
+<span id="cb5-32"><a href="#cb5-32" tabindex="-1"></a><span class="fu">predict</span>(hurdle,<span class="at">newdata=</span>d[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>,],<span class="at">type=</span><span class="st">&quot;zero&quot;</span>)</span>
+<span id="cb5-33"><a href="#cb5-33" tabindex="-1"></a><span class="co">#&gt;         1         2         3         4 </span></span>
+<span id="cb5-34"><a href="#cb5-34" tabindex="-1"></a><span class="co">#&gt; 0.4010736 0.6524941 0.3439664 0.2229778</span></span>
+<span id="cb5-35"><a href="#cb5-35" tabindex="-1"></a><span class="fu">predict</span>(hurdle,<span class="at">newdata=</span>d[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>,],<span class="at">type=</span><span class="st">&quot;count&quot;</span>)</span>
+<span id="cb5-36"><a href="#cb5-36" tabindex="-1"></a><span class="co">#&gt;        1        2        3        4 </span></span>
+<span id="cb5-37"><a href="#cb5-37" tabindex="-1"></a><span class="co">#&gt; 1.916825 1.397675 2.666691 3.908014</span></span></code></pre></div>
+<p>The first right-hand side specifies the count model, and the second
+specifies the binary model. An offset inside a right-hand side applies
+only to that component. An offset supplied as a vector through the
+function argument applies to the count component; a two-column matrix
+supplies count and binary offsets separately.</p>
+<p><code>vcov(fit)</code> has one row per regression coefficient.
+<code>vcov(fit, full=TRUE)</code> also includes theta when it is
+estimated. Prediction standard errors use this full covariance to
+account for how a small change in each fitted parameter changes the
+prediction. This local approximation is called the delta method; it
+includes dependence between the regression coefficients and theta.</p>
+<p>For these count models, the joint information is computed from
+analytic likelihood derivatives and accumulated over blocks of
+observations. This avoids repeatedly perturbing each parameter and
+recalculating all score contributions to approximate the curvature. The
+calculation is useful when many coefficients are fitted or observations
+are read in blocks, while retaining the same joint uncertainty target.
+Numerical derivatives remain useful as an independent check of the
+implementation.</p>
 </div>
-<div id="zero-inflated-models" class="section level1">
-<h1>Zero-inflated models</h1>
-<p>Zero inflation, introduced by Lambert (1992), differs from a hurdle
-in that the two components share a latent variable: a <code>y = 0</code>
-outcome could come from the inflation component (with probability
-<code>pi_i</code>) <em>or</em> from the count component (with
-probability <code>1 - pi_i</code> and a count-side zero). The likelihood
-for <code>y = 0</code> is</p>
-<p><span class="math display">\[
-\Pr(Y_i = 0) = \pi_i + (1 - \pi_i) f(0; \mu_i)
-\]</span></p>
-<p>and for <code>y &gt; 0</code> it is
-<code>(1 - pi_i) f(y; mu_i)</code>. The two-component mixture rules out
-a closed-form factorization, so <em>fastglm</em> uses an EM
-algorithm:</p>
-<ul>
-<li><strong>E-step</strong>: posterior
-<code>tau_i = P(Z_i = 1 | y_i)</code> for each observation, computed in
-log-space with <code>logsumexp</code> to avoid catastrophic cancellation
-when <code>pi_i</code> is near 0 or 1.</li>
-<li><strong>M-step</strong>: a binomial logit / probit / cloglog / log
-fit with response <code>tau</code> (continuous), weights 1; followed by
-a Poisson or NB fit on the <em>original</em> <code>y</code> with prior
-weights <code>1 - tau</code>. For NB, an inner Brent MLE re-estimates
-<code>theta</code> after each count-side step.</li>
-</ul>
-<p>The final observed-information <code>vcov</code> comes from a
-numerical Jacobian of the analytical observed score at the EM fixed
-point, which is stable and cheap (block-diagonal per
-<code>(gamma, beta, theta)</code>). The complete EM driver — E-step,
-both M-steps, the inner theta MLE, and the score Jacobian — runs in
-C++.</p>
-<p>The formula syntax matches <code>fastglm_hurdle()</code> exactly:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>fit_f <span class="ot">&lt;-</span> <span class="fu">fastglm_zi</span>(art <span class="sc">~</span> ., <span class="at">data =</span> bioChemists, <span class="at">dist =</span> <span class="st">&quot;poisson&quot;</span>,</span>
-<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>                    <span class="at">em.tol =</span> <span class="fl">1e-10</span>, <span class="at">em.maxit =</span> <span class="dv">300</span><span class="dt">L</span>)</span>
-<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>fit_p <span class="ot">&lt;-</span> pscl<span class="sc">::</span><span class="fu">zeroinfl</span>(art <span class="sc">~</span> ., <span class="at">data =</span> bioChemists, <span class="at">dist =</span> <span class="st">&quot;poisson&quot;</span>)</span>
-<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a></span>
-<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">abs</span>(<span class="fu">unname</span>(<span class="fu">coef</span>(fit_f, <span class="st">&quot;count&quot;</span>)) <span class="sc">-</span> <span class="fu">unname</span>(fit_p<span class="sc">$</span>coefficients<span class="sc">$</span>count)))</span>
-<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="co">#&gt; [1] 2.654454e-06</span></span>
-<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">abs</span>(<span class="fu">unname</span>(<span class="fu">coef</span>(fit_f, <span class="st">&quot;zero&quot;</span>))  <span class="sc">-</span> <span class="fu">unname</span>(fit_p<span class="sc">$</span>coefficients<span class="sc">$</span>zero)))</span>
-<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">#&gt; [1] 1.835971e-05</span></span>
-<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="fu">abs</span>(<span class="fu">as.numeric</span>(<span class="fu">logLik</span>(fit_f)) <span class="sc">-</span> <span class="fu">as.numeric</span>(<span class="fu">logLik</span>(fit_p)))</span>
-<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="co">#&gt; [1] 1.010903e-09</span></span></code></pre></div>
-<p>EM is iterative, so the agreement is slightly looser than for hurdle
-(where the two parts are closed-form independent fits), but coefficients
-and the joint log-likelihood still match to about 1e-5.</p>
-<p>A timing comparison on a simulated zero-inflated Poisson:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">21</span>)</span>
-<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>n  <span class="ot">&lt;-</span> <span class="dv">3000</span></span>
-<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>x1 <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(n);  x2 <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(n)</span>
-<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>eta_c <span class="ot">&lt;-</span> <span class="fl">0.7</span> <span class="sc">+</span> <span class="fl">0.4</span> <span class="sc">*</span> x1 <span class="sc">-</span> <span class="fl">0.3</span> <span class="sc">*</span> x2</span>
-<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>eta_z <span class="ot">&lt;-</span> <span class="sc">-</span><span class="fl">0.4</span> <span class="sc">+</span> <span class="fl">0.5</span> <span class="sc">*</span> x1 <span class="sc">+</span> <span class="fl">0.2</span> <span class="sc">*</span> x2</span>
-<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>z     <span class="ot">&lt;-</span> <span class="fu">rbinom</span>(n, <span class="dv">1</span>, <span class="fu">plogis</span>(eta_z))</span>
-<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>y     <span class="ot">&lt;-</span> <span class="fu">ifelse</span>(z <span class="sc">==</span> <span class="dv">1</span>, <span class="dv">0</span><span class="dt">L</span>, <span class="fu">rpois</span>(n, <span class="fu">exp</span>(eta_c)))</span>
-<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>df    <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">y =</span> y, <span class="at">x1 =</span> x1, <span class="at">x2 =</span> x2)</span>
-<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a></span>
-<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a>mb_zi <span class="ot">&lt;-</span> <span class="fu">microbenchmark</span>(</span>
-<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a>    <span class="at">fastglm_zi =</span> <span class="fu">fastglm_zi</span>(y <span class="sc">~</span> x1 <span class="sc">+</span> x2, <span class="at">data =</span> df, <span class="at">dist =</span> <span class="st">&quot;poisson&quot;</span>),</span>
-<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>    <span class="at">pscl_zi    =</span> pscl<span class="sc">::</span><span class="fu">zeroinfl</span>(y <span class="sc">~</span> x1 <span class="sc">+</span> x2, <span class="at">data =</span> df, <span class="at">dist =</span> <span class="st">&quot;poisson&quot;</span>),</span>
-<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>    <span class="at">times =</span> <span class="dv">5</span><span class="dt">L</span></span>
-<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a>)</span>
-<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a><span class="fu">print</span>(mb_zi)</span>
-<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a><span class="co">#&gt; Unit: milliseconds</span></span>
-<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a><span class="co">#&gt;        expr       min        lq      mean    median        uq       max neval</span></span>
-<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a><span class="co">#&gt;  fastglm_zi  5.784034  6.104777  6.233632  6.129541  6.398583  6.751224     5</span></span>
-<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a><span class="co">#&gt;     pscl_zi 32.258841 33.269614 35.642784 35.234375 35.524532 41.926559     5</span></span>
-<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a><span class="co">#&gt;  cld</span></span>
-<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a><span class="co">#&gt;   a </span></span>
-<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a><span class="co">#&gt;    b</span></span></code></pre></div>
+<div id="zero-inflated-counts" class="section level1">
+<h1>Zero-inflated counts</h1>
+<p>A zero-inflated model assigns probability <span class="math inline">\(\pi\)</span> to a structural zero and probability
+<span class="math inline">\(1-\pi\)</span> to an ordinary count
+distribution. Its marginal zero probability is <span class="math inline">\(\pi+(1-\pi)p_0\)</span>, and its marginal mean is
+<span class="math inline">\((1-\pi)\mu\)</span>. For an observed zero,
+the data do not reveal which process generated it. Estimation therefore
+involves uncertainty about both components, and their coefficient errors
+can be related. The covariance calculation includes this dependence when
+reporting uncertainty in the overall mean or zero probability.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">545</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>d<span class="sc">$</span>inflated <span class="ot">&lt;-</span> <span class="fu">ifelse</span>(<span class="fu">rbinom</span>(<span class="fu">nrow</span>(d),<span class="dv">1</span>,<span class="fu">plogis</span>(<span class="sc">-</span>.<span class="dv">8</span><span class="fl">+.4</span><span class="sc">*</span>d<span class="sc">$</span>x)),<span class="dv">0</span>,d<span class="sc">$</span>y)</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>zi <span class="ot">&lt;-</span> <span class="fu">fastglm_zi</span>(inflated<span class="sc">~</span>x<span class="sc">+</span><span class="fu">offset</span>(<span class="fu">log</span>(exposure))<span class="sc">|</span>x,<span class="at">data=</span>d,</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>                 <span class="at">dist=</span><span class="st">&quot;poisson&quot;</span>,<span class="at">em.maxit=</span><span class="dv">300</span>)</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="fu">predict</span>(zi,<span class="at">newdata=</span>d[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>,],<span class="at">type=</span><span class="st">&quot;prob&quot;</span>,<span class="at">at=</span><span class="dv">0</span><span class="sc">:</span><span class="dv">4</span>)</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="co">#&gt;           0          1          2          3           4</span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co">#&gt; 1 0.5984625 0.18071284 0.12915008 0.06153314 0.021987951</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt; 2 0.7316940 0.20074527 0.05566819 0.01029147 0.001426952</span></span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt; 3 0.5339135 0.09641854 0.12592323 0.10963770 0.071593771</span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt; 4 0.5619508 0.01746113 0.04189834 0.06702397 0.080412716</span></span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="fu">predict</span>(zi,<span class="at">newdata=</span>d[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>,],<span class="at">type=</span><span class="st">&quot;response&quot;</span>,<span class="at">se.fit=</span><span class="cn">TRUE</span>)</span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt; Predictions with standard errors</span></span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a><span class="co">#&gt; Scale: response mean</span></span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="co">#&gt;  Row Estimate Std. Error</span></span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="co">#&gt;    1   0.7546    0.04888</span></span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a><span class="co">#&gt;    2   0.3496    0.05674</span></span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="co">#&gt;    3   1.3138    0.09052</span></span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="co">#&gt;    4   2.1197    0.30496</span></span></code></pre></div>
+<p>The same <code>type=&quot;zero&quot;</code> prediction reports the marginal
+probability of observing zero in both hurdle and zero-inflated models.
+The meaning of <code>type=&quot;count&quot;</code> differs: it is the conditional
+positive mean for a hurdle model and the ordinary count-component mean
+for a zero-inflated model.</p>
+<div id="testing-associations-within-and-across-components" class="section level2">
+<h2>Testing associations within and across components</h2>
+<p>A predictor can contribute to the count regression, the binary
+regression, or both. <code>fastglm_wald_test()</code> tests the
+corresponding coefficients jointly and prints the hypothesis, statistic,
+degrees of freedom, and p-value. By default, a term is tested in each
+component where it appears. Selecting <code>component=&quot;count&quot;</code> or
+<code>component=&quot;zero&quot;</code> restricts the hypothesis to that
+component. For a categorical predictor, all coefficients belonging to
+the formula term are included.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">fastglm_wald_test</span>(hurdle,<span class="at">terms=</span><span class="st">&quot;x&quot;</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt; Terms: x</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; Covariance: model-based</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt; Component: Count distribution, Positive-outcome probability</span></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt;      45.09  2 &lt; 1e-04</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt;         Estimate Std. Error    Null</span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt; count_x  0.36578    0.07098 0.00000</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co">#&gt; zero_x   0.41755    0.09699 0.00000</span></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a><span class="fu">fastglm_wald_test</span>(hurdle,<span class="at">terms=</span><span class="st">&quot;x&quot;</span>,<span class="at">component=</span><span class="st">&quot;count&quot;</span>)</span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a><span class="co">#&gt; Terms: x</span></span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a><span class="co">#&gt; Covariance: model-based</span></span>
+<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a><span class="co">#&gt; Component: Count distribution</span></span>
+<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a><span class="co">#&gt;      26.56  1 &lt; 1e-04</span></span>
+<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a><span class="co">#&gt;         Estimate Std. Error    Null</span></span>
+<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a><span class="co">#&gt; count_x  0.36578    0.07098 0.00000</span></span>
+<span id="cb7-31"><a href="#cb7-31" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-32"><a href="#cb7-32" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb7-33"><a href="#cb7-33" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span>
+<span id="cb7-34"><a href="#cb7-34" tabindex="-1"></a><span class="fu">fastglm_wald_test</span>(zi,<span class="at">terms=</span><span class="st">&quot;x&quot;</span>,<span class="at">component=</span><span class="st">&quot;zero&quot;</span>)</span>
+<span id="cb7-35"><a href="#cb7-35" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb7-36"><a href="#cb7-36" tabindex="-1"></a><span class="co">#&gt; Terms: x</span></span>
+<span id="cb7-37"><a href="#cb7-37" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb7-38"><a href="#cb7-38" tabindex="-1"></a><span class="co">#&gt; Covariance: model-based</span></span>
+<span id="cb7-39"><a href="#cb7-39" tabindex="-1"></a><span class="co">#&gt; Component: Structural-zero probability</span></span>
+<span id="cb7-40"><a href="#cb7-40" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-41"><a href="#cb7-41" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb7-42"><a href="#cb7-42" tabindex="-1"></a><span class="co">#&gt;      1.947  1  0.1629</span></span>
+<span id="cb7-43"><a href="#cb7-43" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-44"><a href="#cb7-44" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb7-45"><a href="#cb7-45" tabindex="-1"></a><span class="co">#&gt;        Estimate Std. Error   Null</span></span>
+<span id="cb7-46"><a href="#cb7-46" tabindex="-1"></a><span class="co">#&gt; zero_x   0.1706     0.1223 0.0000</span></span>
+<span id="cb7-47"><a href="#cb7-47" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-48"><a href="#cb7-48" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb7-49"><a href="#cb7-49" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span>
+<span id="cb7-50"><a href="#cb7-50" tabindex="-1"></a><span class="fu">fastglm_wald_test</span>(truncated,<span class="at">terms=</span><span class="st">&quot;x&quot;</span>)</span>
+<span id="cb7-51"><a href="#cb7-51" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb7-52"><a href="#cb7-52" tabindex="-1"></a><span class="co">#&gt; Terms: x</span></span>
+<span id="cb7-53"><a href="#cb7-53" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb7-54"><a href="#cb7-54" tabindex="-1"></a><span class="co">#&gt; Covariance: model-based</span></span>
+<span id="cb7-55"><a href="#cb7-55" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-56"><a href="#cb7-56" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb7-57"><a href="#cb7-57" tabindex="-1"></a><span class="co">#&gt;      26.56  1 &lt; 1e-04</span></span>
+<span id="cb7-58"><a href="#cb7-58" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-59"><a href="#cb7-59" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb7-60"><a href="#cb7-60" tabindex="-1"></a><span class="co">#&gt;   Estimate Std. Error    Null</span></span>
+<span id="cb7-61"><a href="#cb7-61" tabindex="-1"></a><span class="co">#&gt; x  0.36578    0.07098 0.00000</span></span>
+<span id="cb7-62"><a href="#cb7-62" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-63"><a href="#cb7-63" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb7-64"><a href="#cb7-64" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span></code></pre></div>
+<p>The binary coefficient describes positive-outcome probability in a
+hurdle model and structural-zero probability in a zero-inflated model.
+The printed component label makes this distinction explicit. These are
+first-order chi-square tests, so sparse outcomes, extreme coefficients,
+or weakly identified mixture components can make their approximation
+inaccurate. An estimated negative-binomial size at its numerical
+boundary returns an unavailable test with an explanation.</p>
+<p>Named contrasts can also combine coefficients from different
+components using the <code>count_</code> and <code>zero_</code> names
+returned by <code>coef()</code>. Such a hypothesis needs a substantive
+interpretation: equality between a log-mean coefficient and a log-odds
+coefficient does not mean equal changes in the outcome. For comparisons
+on the outcome scale, the average predictions below are often easier to
+interpret. The test retains cross-component covariance, including
+covariance supplied through <code>fastglm_vcov()</code>.</p>
+<p>For truncated, hurdle, and zero-inflated negative-binomial fits, the
+default regression covariance accounts for estimating size jointly.
+<code>fastglm_nb()</code> retains its conventional GLM covariance with
+size fixed. Its joint observed covariance can instead be used by
+selecting the regression rows and columns:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>regression <span class="ot">&lt;-</span> <span class="fu">names</span>(<span class="fu">coef</span>(nb))</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>joint_covariance <span class="ot">&lt;-</span> <span class="fu">vcov</span>(nb,<span class="at">full=</span><span class="cn">TRUE</span>)[regression,regression,drop<span class="ot">=</span><span class="cn">FALSE</span>]</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="fu">fastglm_wald_test</span>(nb,<span class="at">terms=</span><span class="st">&quot;x&quot;</span>,<span class="at">vcov.=</span>joint_covariance)</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="co">#&gt; Terms: x</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co">#&gt; Covariance: supplied coefficient covariance</span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="co">#&gt;      47.81  1 &lt; 1e-04</span></span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a><span class="co">#&gt;   Estimate Std. Error    Null</span></span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="co">#&gt; x  0.37117    0.05368 0.00000</span></span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span></code></pre></div>
+<p>Simulation from a fitted model can help assess whether its zero
+frequency and upper tail resemble those in the observed data. This
+comparison describes model adequacy and does not replace uncertainty
+assessment or validation on new observations.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>replicates <span class="ot">&lt;-</span> <span class="fu">simulate</span>(hurdle,<span class="at">nsim=</span><span class="dv">3</span>,<span class="at">seed=</span><span class="dv">546</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="fu">c</span>(<span class="at">observed=</span><span class="fu">mean</span>(d<span class="sc">$</span>y<span class="sc">==</span><span class="dv">0</span>),<span class="fu">vapply</span>(replicates,<span class="cf">function</span>(z) <span class="fu">mean</span>(z<span class="sc">==</span><span class="dv">0</span>),<span class="fu">numeric</span>(<span class="dv">1</span>)))</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="co">#&gt; observed    sim_1    sim_2    sim_3 </span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="co">#&gt;    0.402    0.408    0.414    0.380</span></span></code></pre></div>
+<p>For nonnegative continuous outcomes, the two-part model in the
+semicontinuous-outcomes vignette uses a binary component together with a
+positive Gamma distribution.</p>
 </div>
-<div id="references" class="section level1">
-<h1>References</h1>
-<ul>
-<li><p>Cameron, A. C. and Trivedi, P. K. (1998). <em>Regression Analysis
-of Count Data</em>. Cambridge University Press.</p></li>
-<li><p>Mullahy, J. (1986). Specification and testing of some modified
-count data models. <em>Journal of Econometrics</em>, 33(3), 341–365. <a href="doi:10.1016/0304-4076(86)90002-3" class="uri">doi:10.1016/0304-4076(86)90002-3</a></p></li>
-<li><p>Lambert, D. (1992). Zero-inflated Poisson regression, with an
-application to defects in manufacturing. <em>Technometrics</em>, 34(1),
-1–14. <a href="doi:10.2307/1269547" class="uri">doi:10.2307/1269547</a></p></li>
-<li><p>Zeileis, A., Kleiber, C., and Jackman, S. (2008). Regression
-models for count data in R. <em>Journal of Statistical Software</em>,
-27(8), 1–25. <a href="doi:10.18637/jss.v027.i08" class="uri">doi:10.18637/jss.v027.i08</a></p></li>
-<li><p>Venables, W. N. and Ripley, B. D. (2002). <em>Modern Applied
-Statistics with S</em> (4th ed.). Springer.</p></li>
-</ul>
+</div>
+<div id="larger-datasets-and-common-model-specifications" class="section level1">
+<h1>Larger datasets and common model specifications</h1>
+<p>A large count analysis may require predictors to be stored sparsely
+or read in blocks. The model specification and uncertainty target should
+remain the same when the data representation changes.
+<code>fastglm_nb()</code> accepts a sparse matrix directly, while
+<code>fastglm_hurdle()</code> accepts separate count and binary
+predictor matrices through its first argument and <code>z</code>. The
+response for the matrix hurdle interface is supplied as
+<code>response</code>.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>Xs <span class="ot">&lt;-</span> <span class="fu">as</span>(<span class="fu">model.matrix</span>(<span class="sc">~</span>x,d),<span class="st">&quot;dgCMatrix&quot;</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>nb_sparse <span class="ot">&lt;-</span> <span class="fu">fastglm_nb</span>(Xs,d<span class="sc">$</span>y,<span class="at">offset=</span><span class="fu">log</span>(d<span class="sc">$</span>exposure))</span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>hurdle_sparse <span class="ot">&lt;-</span> <span class="fu">fastglm_hurdle</span>(Xs,<span class="at">response=</span>d<span class="sc">$</span>y,<span class="at">z=</span>Xs,</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>                                <span class="at">offset=</span><span class="fu">log</span>(d<span class="sc">$</span>exposure),<span class="at">dist=</span><span class="st">&quot;negbin&quot;</span>)</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">abs</span>(<span class="fu">unname</span>(<span class="fu">coef</span>(nb_sparse))<span class="sc">-</span><span class="fu">unname</span>(<span class="fu">coef</span>(nb))))</span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="co">#&gt; [1] 7.545836e-11</span></span></code></pre></div>
+<p>When data are read in blocks, <code>fastglm_source()</code> records a
+function that returns the requested rows and the formula information
+needed to construct the same predictor columns in each block. A formula
+with two right-hand sides specifies separate count and binary
+regressions. The next fit reads five blocks of 100 observations, and its
+coefficient summary requires no further reads.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>read_block <span class="ot">&lt;-</span> <span class="cf">function</span>(k) d[((k<span class="dv">-1</span>)<span class="sc">*</span><span class="dv">100</span><span class="sc">+</span><span class="dv">1</span>)<span class="sc">:</span>(k<span class="sc">*</span><span class="dv">100</span>),]</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>count_source <span class="ot">&lt;-</span> <span class="fu">fastglm_source</span>(read_block,<span class="dv">5</span>,</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>    <span class="at">formula=</span>y<span class="sc">~</span>x<span class="sc">+</span><span class="fu">offset</span>(<span class="fu">log</span>(exposure))<span class="sc">|</span>x,<span class="at">prototype=</span>d)</span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>hurdle_stream <span class="ot">&lt;-</span> <span class="fu">fastglm_hurdle</span>(count_source,<span class="at">dist=</span><span class="st">&quot;negbin&quot;</span>)</span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">abs</span>(<span class="fu">unname</span>(<span class="fu">coef</span>(hurdle_stream))<span class="sc">-</span><span class="fu">unname</span>(<span class="fu">coef</span>(hurdle))))</span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a><span class="co">#&gt; [1] 4.748764e-08</span></span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a><span class="fu">summary</span>(hurdle_stream)</span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a><span class="co">#&gt; Hurdle regression</span></span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a><span class="co">#&gt; Call:</span></span>
+<span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a><span class="co">#&gt; fastglm_hurdle(formula = count_source, dist = &quot;negbin&quot;)</span></span>
+<span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a><span class="co">#&gt; Coefficients:</span></span>
+<span id="cb11-14"><a href="#cb11-14" tabindex="-1"></a><span class="co">#&gt;                   Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
+<span id="cb11-15"><a href="#cb11-15" tabindex="-1"></a><span class="co">#&gt; count_(Intercept)  0.30076    0.11648   2.582  0.00982 ** </span></span>
+<span id="cb11-16"><a href="#cb11-16" tabindex="-1"></a><span class="co">#&gt; count_x            0.36578    0.07098   5.153  &lt; 1e-04 ***</span></span>
+<span id="cb11-17"><a href="#cb11-17" tabindex="-1"></a><span class="co">#&gt; zero_(Intercept)   0.42498    0.09362   4.540  &lt; 1e-04 ***</span></span>
+<span id="cb11-18"><a href="#cb11-18" tabindex="-1"></a><span class="co">#&gt; zero_x             0.41755    0.09699   4.305  &lt; 1e-04 ***</span></span>
+<span id="cb11-19"><a href="#cb11-19" tabindex="-1"></a><span class="co">#&gt; ---</span></span>
+<span id="cb11-20"><a href="#cb11-20" tabindex="-1"></a><span class="co">#&gt; Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</span></span>
+<span id="cb11-21"><a href="#cb11-21" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-22"><a href="#cb11-22" tabindex="-1"></a><span class="co">#&gt;  Theta Std. Error</span></span>
+<span id="cb11-23"><a href="#cb11-23" tabindex="-1"></a><span class="co">#&gt;  1.746     0.6344</span></span>
+<span id="cb11-24"><a href="#cb11-24" tabindex="-1"></a><span class="co">#&gt; Log-likelihood: -782.1</span></span>
+<span id="cb11-25"><a href="#cb11-25" tabindex="-1"></a><span class="co">#&gt; Observations: 500</span></span>
+<span id="cb11-26"><a href="#cb11-26" tabindex="-1"></a><span class="co">#&gt; Convergence: converged</span></span></code></pre></div>
+<p>While fitting, these models hold one block of predictor rows and
+coefficient-sized matrices in memory, and fitted objects keep small
+records of the block sizes. The source must return the same observations
+throughout fitting and later inference. The large-data vignette explains
+how to use file or database readers and how to save predictions block by
+block when the full prediction vector would be too large for memory.</p>
+</div>
+<div id="uncertainty-for-average-counts" class="section level1">
+<h1>Uncertainty for average counts</h1>
+<p>An overall average count can be more directly interpretable than the
+coefficients of the two regressions. <code>fastglm_average()</code>
+averages the fitted response means over the supplied predictor
+distribution. Its standard error combines uncertainty in both components
+and, for negative-binomial counts, theta. The calculation conditions on
+the predictor values used for averaging.</p>
+<p>If observations are correlated within independent groups, a
+cluster-robust covariance can be used. The estimating contributions from
+both components are summed within each group before uncertainty is
+calculated; estimating the two components separately does not justify
+omitting their cross-component covariance under this sampling
+structure.</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>cluster <span class="ot">&lt;-</span> <span class="fu">rep</span>(<span class="fu">seq_len</span>(<span class="dv">100</span>),<span class="at">each=</span><span class="dv">5</span>)</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>V <span class="ot">&lt;-</span> <span class="fu">fastglm_vcov</span>(hurdle,<span class="at">type=</span><span class="st">&quot;HC1&quot;</span>,<span class="at">cluster=</span>cluster,<span class="at">full=</span><span class="cn">TRUE</span>)</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a><span class="fu">fastglm_average</span>(hurdle,<span class="at">vcov.=</span>V)</span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a><span class="co">#&gt;   estimate  std.error conf.low conf.high</span></span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a><span class="co">#&gt; 1 1.368745 0.07139844 1.228807  1.508684</span></span></code></pre></div>
+<p>Here the group labels illustrate the interface. In an analysis, they
+should identify the independent sampling groups, such as sites or
+patients, and a sufficiently large number of groups is needed for the
+covariance approximation. <code>full=TRUE</code> includes theta so that
+uncertainty in the average response can use the complete parameter
+covariance.</p>
+<p>A bootstrap provides another way to assess uncertainty by repeatedly
+resampling the independent units and refitting the model. The cluster
+bootstrap below samples whole groups, preserving observations within
+each selected group. Its statistic is the average prediction on the
+original predictor distribution, so the interpretation matches the
+preceding conditional average.</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>boot <span class="ot">&lt;-</span> <span class="fu">fastglm_bootstrap</span>(hurdle,<span class="at">R=</span><span class="dv">49</span>,<span class="at">seed=</span><span class="dv">547</span>,<span class="at">type=</span><span class="st">&quot;cluster&quot;</span>,<span class="at">cluster=</span>cluster,</span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>    <span class="at">statistic=</span><span class="cf">function</span>(model) <span class="fu">mean</span>(<span class="fu">predict</span>(model,<span class="at">newdata=</span>d,<span class="at">type=</span><span class="st">&quot;response&quot;</span>)))</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a><span class="co">#&gt; Warning: 1 bootstrap refits failed; uncertainty summaries are unavailable</span></span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>boot</span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a><span class="co">#&gt; Refit bootstrap (cluster)</span></span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a><span class="co">#&gt; Refits: 48 of 49 successful</span></span>
+<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a><span class="co">#&gt; Estimates and confidence intervals:</span></span>
+<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a><span class="co">#&gt;            Estimate Std. Error lower upper</span></span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a><span class="co">#&gt; statistic1    1.369         NA    NA    NA</span></span>
+<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a><span class="co">#&gt; Inference: Unavailable; inspect the refit diagnostics</span></span></code></pre></div>
+<p>The small number of repetitions keeps this example short; a
+substantive analysis needs enough repetitions to estimate the interval
+endpoints adequately. The reported percentile interval uses quantiles of
+the refitted statistics. Failed or nonconverged refits are recorded in
+<code>diagnostics</code>, and uncertainty summaries are withheld if any
+refit fails. The procedure keeps the original predictor coding and
+transformations fixed, so it does not repeat model selection or
+data-dependent preprocessing.</p>
 </div>
 
 

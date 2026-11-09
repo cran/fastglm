@@ -12,9 +12,8 @@
 
 <meta name="author" content="Jared Huling" />
 
-<meta name="date" content="2026-08-26" />
 
-<title>Overview of the ‘fastglm’ Package</title>
+<title>Models, inference, and computation with fastglm</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -339,343 +338,656 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<h1 class="title toc-ignore">Overview of the ‘fastglm’ Package</h1>
+<h1 class="title toc-ignore">Models, inference, and computation with
+fastglm</h1>
 <h4 class="author">Jared Huling</h4>
-<h4 class="date">2026-08-26</h4>
 
 
 
-<p>The <em>fastglm</em> package is intended as a <strong>fast</strong>
-<em>and</em> <strong>stable</strong> alternative to
-<code>stats::glm()</code> for fitting generalized linear models. It is
-compatible with <code>R</code>’s <code>family</code> objects (see
-<code>?family</code>) and produces fitted objects whose downstream
-methods (<code>summary()</code>, <code>vcov()</code>,
-<code>predict()</code>, <code>coef()</code>, <code>residuals()</code>,
-<code>logLik()</code>) behave exactly like those for a <code>glm</code>.
-This vignette walks through the main functionality of the package at a
-higher level than the other vignettes.</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(fastglm)</span></code></pre></div>
-<div id="fitting-a-glm" class="section level1">
-<h1>Fitting a GLM</h1>
-<p>The main package function is <code>fastglm()</code>. It takes a
-numeric design matrix <code>x</code>, a response <code>y</code>, and an
-<code>R</code> <code>family</code> object:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">data</span>(esoph)</span>
-<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">model.matrix</span>(<span class="sc">~</span> agegp <span class="sc">+</span> <span class="fu">unclass</span>(tobgp) <span class="sc">+</span> <span class="fu">unclass</span>(alcgp),</span>
-<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>                  <span class="at">data =</span> esoph)</span>
-<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">cbind</span>(esoph<span class="sc">$</span>ncases, esoph<span class="sc">$</span>ncontrols)</span>
-<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a></span>
-<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">fastglm</span>(x, y, <span class="at">family =</span> <span class="fu">binomial</span>(<span class="at">link =</span> <span class="st">&quot;cloglog&quot;</span>))</span>
-<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="fu">summary</span>(fit)</span>
-<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt; Call:</span></span>
-<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt; fastglm.default(x = x, y = y, family = binomial(link = &quot;cloglog&quot;))</span></span>
-<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a><span class="co">#&gt; Coefficients:</span></span>
-<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a><span class="co">#&gt;                Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
-<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a><span class="co">#&gt; (Intercept)    -4.29199    0.29777 -14.414  &lt; 2e-16 ***</span></span>
-<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="co">#&gt; agegp.L         3.30677    0.63454   5.211 1.88e-07 ***</span></span>
-<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a><span class="co">#&gt; agegp.Q        -1.35525    0.57310  -2.365    0.018 *  </span></span>
-<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a><span class="co">#&gt; agegp.C         0.20296    0.43333   0.468    0.640    </span></span>
-<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a><span class="co">#&gt; agegp^4         0.15056    0.29318   0.514    0.608    </span></span>
-<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a><span class="co">#&gt; agegp^5        -0.23425    0.17855  -1.312    0.190    </span></span>
-<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a><span class="co">#&gt; unclass(tobgp)  0.33276    0.07285   4.568 4.93e-06 ***</span></span>
-<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a><span class="co">#&gt; unclass(alcgp)  0.80384    0.07538  10.664  &lt; 2e-16 ***</span></span>
-<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a><span class="co">#&gt; ---</span></span>
-<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a><span class="co">#&gt; Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</span></span>
-<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a><span class="co">#&gt; (Dispersion parameter for binomial family taken to be 1)</span></span>
-<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a><span class="co">#&gt;     Null deviance: 61.609  on 87  degrees of freedom</span></span>
-<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a><span class="co">#&gt; Residual deviance: 96.950  on 80  degrees of freedom</span></span>
-<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a><span class="co">#&gt; AIC: 228</span></span>
-<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a><span class="co">#&gt; Number of Fisher Scoring iterations: 6</span></span></code></pre></div>
-<p><code>fastglm()</code> does not accept a formula directly, it
-operates on a pre-built design matrix. To use a formula and a data
-frame, pass <code>fastglm_fit</code> as the fitting function to base
-<code>glm()</code>:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>fit2 <span class="ot">&lt;-</span> <span class="fu">glm</span>(<span class="fu">cbind</span>(ncases, ncontrols) <span class="sc">~</span> agegp <span class="sc">+</span> <span class="fu">unclass</span>(tobgp) <span class="sc">+</span> <span class="fu">unclass</span>(alcgp),</span>
-<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>            <span class="at">data =</span> esoph, <span class="at">family =</span> <span class="fu">binomial</span>(<span class="at">link =</span> <span class="st">&quot;cloglog&quot;</span>),</span>
-<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>            <span class="at">method =</span> fastglm_fit)</span></code></pre></div>
-</div>
-<div id="decomposition-methods" class="section level1">
-<h1>Decomposition methods</h1>
-<p>The IRLS algorithm reduces every iteration to a weighted
-least-squares problem. <em>fastglm</em> supports six different matrix
-decompositions for solving that WLS step, all from <em>RcppEigen</em>
-(Bates and Eddelbuettel, 2013); the choice trades off speed against
-numerical stability and rank-revealing behavior:</p>
+<p>The <em>fastglm</em> package provides regression models for
+continuous, binary, count, and ordered outcomes, with an emphasis on
+efficient computation and numerical stability. Its scope includes
+model-specific mean bias reduction, coefficient and model-assumption
+tests, probability and mean-response summaries, and methods for repeated
+fitting or data too large to retain as a dense design. This overview
+identifies the available models and methods before developing a common
+workflow for specification, diagnostics, uncertainty, and repeated
+outcomes.</p>
+<div id="package-scope" class="section level1">
+<h1>Package scope and model selection</h1>
+<div id="models-and-estimation" class="section level2">
+<h2>Models and estimation</h2>
 <table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
 <thead>
 <tr class="header">
-<th><code>method</code></th>
-<th>decomposition</th>
+<th align="left">Outcome or modeling need</th>
+<th align="left">Main interface</th>
+<th align="left">Estimation and worked guide</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td><code>0</code></td>
-<td>column-pivoted Householder QR (default; rank-revealing)</td>
+<td align="left">Generalized linear models (GLMs): continuous responses,
+binary outcomes, or counts</td>
+<td align="left"><code>fastglm()</code>; also
+<code>glm(method=fastglm_fit)</code></td>
+<td align="left">Likelihood or quasi-likelihood fitting; mean bias
+reduction for supported likelihood family/link combinations. <a href="#specifying-the-mean-model">GLM specification</a> and <a href="firth-fastglm.html">bias reduction</a></td>
 </tr>
 <tr class="even">
-<td><code>1</code></td>
-<td>unpivoted Householder QR</td>
+<td align="left">Counts with variation beyond the Poisson model</td>
+<td align="left"><code>fastglm_nb()</code></td>
+<td align="left">Maximum likelihood (ML) estimation of regression
+coefficients and negative-binomial size. <a href="count-firth-fastglm.html#negative-binomial-variation">Count
+models</a></td>
 </tr>
 <tr class="odd">
-<td><code>2</code></td>
-<td>LLT Cholesky</td>
+<td align="left">Counts sampled conditional on being positive</td>
+<td align="left"><code>fastglm_truncated()</code></td>
+<td align="left">Zero-truncated Poisson or negative-binomial likelihood.
+<a href="count-firth-fastglm.html#positive-counts-and-hurdle-models">Truncation
+and hurdles</a></td>
 </tr>
 <tr class="even">
-<td><code>3</code></td>
-<td>LDLT Cholesky</td>
+<td align="left">Separate models for occurrence and positive counts</td>
+<td align="left"><code>fastglm_hurdle()</code></td>
+<td align="left">Binary occurrence and zero-truncated Poisson or
+negative-binomial components, fitted by ML. <a href="count-firth-fastglm.html#positive-counts-and-hurdle-models">Hurdle
+models</a></td>
 </tr>
 <tr class="odd">
-<td><code>4</code></td>
-<td>full-pivoted Householder QR</td>
+<td align="left">Zeros arising from an additional component and a count
+distribution</td>
+<td align="left"><code>fastglm_zi()</code></td>
+<td align="left">Zero-inflated Poisson or negative-binomial likelihood.
+<a href="count-firth-fastglm.html#zero-inflated-counts">Zero-inflated
+models</a></td>
 </tr>
 <tr class="even">
-<td><code>5</code></td>
-<td>bidiagonal divide-and-conquer SVD</td>
+<td align="left">A point mass at zero and a positive continuous
+amount</td>
+<td align="left"><code>fastglm_twopart()</code></td>
+<td align="left">Binary and Gamma components, with ML or mean bias
+reduction. <a href="semicontinuous-fastglm.html">Two-part
+models</a></td>
+</tr>
+<tr class="odd">
+<td align="left">Ordered outcome categories</td>
+<td align="left"><code>fastglm_ordinal()</code></td>
+<td align="left">Common or selected threshold-specific slopes; logit,
+probit, and complementary log-log links; ML or mean bias reduction. <a href="ordinal-fastglm.html#ordinal-scope">Ordinal models, inference, and
+computation</a></td>
 </tr>
 </tbody>
 </table>
-<p>The default (<code>method = 0</code>) is the safe choice: it is
-rank-revealing, so it handles aliased / collinear columns gracefully.
-The Cholesky methods (<code>2</code> and <code>3</code>) are roughly
-3–4× faster but assume full column rank.</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
-<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>n <span class="ot">&lt;-</span> <span class="dv">5000</span>; p <span class="ot">&lt;-</span> <span class="dv">30</span></span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">rnorm</span>(n <span class="sc">*</span> p), n, p)</span>
-<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">rbinom</span>(n, <span class="dv">1</span>, <span class="fu">plogis</span>(x <span class="sc">%*%</span> <span class="fu">rnorm</span>(p) <span class="sc">*</span> <span class="fl">0.05</span>))</span>
-<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a></span>
-<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="fu">system.time</span>(f0 <span class="ot">&lt;-</span> <span class="fu">fastglm</span>(x, y, <span class="at">family =</span> <span class="fu">binomial</span>()))                 <span class="co"># default</span></span>
-<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt;   0.005   0.000   0.005</span></span>
-<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="fu">system.time</span>(f2 <span class="ot">&lt;-</span> <span class="fu">fastglm</span>(x, y, <span class="at">family =</span> <span class="fu">binomial</span>(), <span class="at">method =</span> <span class="dv">2</span>))     <span class="co"># LLT</span></span>
-<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;   0.002   0.000   0.002</span></span>
-<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="fu">system.time</span>(f3 <span class="ot">&lt;-</span> <span class="fu">fastglm</span>(x, y, <span class="at">family =</span> <span class="fu">binomial</span>(), <span class="at">method =</span> <span class="dv">3</span>))     <span class="co"># LDLT</span></span>
-<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt;   0.003   0.000   0.002</span></span></code></pre></div>
+<p>Mean bias reduction is requested with <code>firth=TRUE</code> in the
+interfaces that support it. For GLMs, support depends on the family and
+link; a fixed-size negative-binomial family supplied through
+<code>negbin(theta)</code> differs from jointly estimating size with
+<code>fastglm_nb()</code>. The truncated, hurdle, and zero-inflated
+count interfaces above currently use ML. The <a href="firth-fastglm.html">bias-reduction guide</a> lists the supported
+GLM combinations, while the ordinal and two-part guides describe their
+respective adjustments.</p>
 </div>
-<div id="stability" class="section level1">
-<h1>Stability</h1>
-<p><em>fastglm</em> does not compromise computational stability for
-speed. It uses a step-halving safeguard following Marschner (2011) and
-starts from better-initialized values than <code>glm()</code> or
-<code>glm2::glm2()</code>, so it tends to converge in cases where the
-standard IRLS algorithm fails. See
-<code>vignette(&quot;fastglm&quot;, package = &quot;fastglm&quot;)</code> for a
-Gamma-with-<code>sqrt</code>-link example where <code>glm()</code> does
-not converge but <code>fastglm()</code> does.</p>
+<div id="inference-prediction-and-assessment" class="section level2">
+<h2>Inference, prediction, and assessment</h2>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">Analysis task</th>
+<th align="left">Interface</th>
+<th align="left">Scope</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Coefficient intervals and joint tests</td>
+<td align="left"><code>confint()</code> and
+<code>fastglm_wald_test()</code></td>
+<td align="left">Model-based Wald inference for supported fitted
+classes; formula terms and named contrasts can combine several
+coefficients</td>
+</tr>
+<tr class="even">
+<td align="left">Profile intervals and likelihood-ratio tests</td>
+<td align="left"><code>confint(method=&quot;profile&quot;)</code>,
+<code>fastglm_profile_test()</code>, and
+<code>fastglm_confint_theta()</code></td>
+<td align="left">Dense binomial-logit Firth fits, dense ordinal ML fits
+with common or varying slopes, and negative-binomial size profiles,
+respectively</td>
+</tr>
+<tr class="odd">
+<td align="left">Score tests of coefficients or the common-slope
+restriction</td>
+<td align="left"><code>fastglm_score_test()</code> and
+<code>fastglm_po_test()</code></td>
+<td align="left">Retained dense ordinal models for coefficient
+constraints; <code>fastglm_po_test()</code> tests complete terms in
+dense or streamed common-slope and partial models</td>
+</tr>
+<tr class="even">
+<td align="left">Robust or clustered standard errors</td>
+<td align="left"><code>fastglm_vcov()</code> and supported
+<code>vcov(type=...)</code> methods</td>
+<td align="left">GLMs, count and two-part models, and dense or streamed
+ordinal fits, subject to each class’s requirements</td>
+</tr>
+<tr class="odd">
+<td align="left">Response or probability summaries</td>
+<td align="left"><code>predict(se.fit=TRUE)</code>,
+<code>fastglm_average()</code>, and
+<code>fastglm_marginal_effects()</code></td>
+<td align="left">Predictions and averages for supported classes;
+automatic marginal effects target common-slope or partial ordinal
+probabilities</td>
+</tr>
+<tr class="even">
+<td align="left">Refitting uncertainty and model assessment</td>
+<td align="left"><code>fastglm_bootstrap()</code>,
+<code>fastglm_diagnostics()</code>, residuals, and
+<code>fastglm_ordinal_assess()</code></td>
+<td align="left">Bootstrap support depends on retained data and model
+class; ordinal prediction scores, calibration, and optional boundary-row
+diagnostics support dense or streamed fits</td>
+</tr>
+</tbody>
+</table>
+<p>These methods use different assumptions and are not interchangeable
+across model classes. Dense partial ordinal fits support robust
+covariance, ML profiles, and constrained score inference. Streamed
+ordinal fits provide model-based and robust covariance, common-slope
+tests, prediction scores, and calibration on the original source.
+General constrained coefficient inference requires retained
+observations. The <a href="ordinal-fastglm.html#ordinal-scope">ordinal
+support guide</a> states these distinctions explicitly. The sections
+below explain <a href="#inference-and-population-averages">coefficient
+uncertainty and population averages</a>, <a href="#joint-coefficient-tests">joint tests</a>, and <a href="#specifying-the-mean-model">readable result displays</a>.</p>
 </div>
-<div id="inference-vcov-robust-se-predictions" class="section level1">
-<h1>Inference: <code>vcov()</code>, robust SE, predictions</h1>
-<p>The fitted object stores the unscaled covariance directly (no
-refitting), and the standard <code>vcov()</code> /
-<code>summary()</code> machinery works as expected:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">fastglm</span>(x, y, <span class="at">family =</span> <span class="fu">binomial</span>(), <span class="at">method =</span> <span class="dv">2</span>)</span>
-<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a></span>
-<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>V    <span class="ot">&lt;-</span> <span class="fu">vcov</span>(fit)</span>
-<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="fu">dim</span>(V)</span>
-<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a><span class="co">#&gt; [1] 30 30</span></span>
-<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a></span>
-<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="do">## standard errors agree with the diagonal of vcov()</span></span>
-<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="fu">all.equal</span>(<span class="fu">sqrt</span>(<span class="fu">diag</span>(V)), <span class="fu">unname</span>(<span class="fu">coef</span>(<span class="fu">summary</span>(fit))[, <span class="st">&quot;Std. Error&quot;</span>]))</span>
-<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt; [1] &quot;names for target but not for current&quot;</span></span></code></pre></div>
-<p>Heteroskedasticity-consistent and cluster-robust covariance matrices
-are available via <code>sandwich::vcovHC()</code> and
-<code>sandwich::vcovCL()</code> — <code>fastglm</code> registers methods
-on those generics, so loading <code>sandwich</code> is all that is
-required:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">library</span>(sandwich)</span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a></span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>V_hc <span class="ot">&lt;-</span> <span class="fu">vcovHC</span>(fit, <span class="at">type =</span> <span class="st">&quot;HC0&quot;</span>)</span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>V_hc[<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>]</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co">#&gt;              X1           X2           X3</span></span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="co">#&gt; X1 8.546454e-04 7.509395e-06 1.483571e-06</span></span>
-<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co">#&gt; X2 7.509395e-06 8.321108e-04 7.951566e-07</span></span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt; X3 1.483571e-06 7.951566e-07 8.351855e-04</span></span>
-<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a></span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>cluster <span class="ot">&lt;-</span> <span class="fu">rep</span>(<span class="fu">seq_len</span>(<span class="dv">20</span>), <span class="at">length.out =</span> n)</span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>V_cl    <span class="ot">&lt;-</span> <span class="fu">vcovCL</span>(fit, <span class="at">cluster =</span> cluster, <span class="at">type =</span> <span class="st">&quot;HC1&quot;</span>)</span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>V_cl[<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>]</span>
-<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a><span class="co">#&gt;               X1            X2           X3</span></span>
-<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a><span class="co">#&gt; X1  0.0007676800 -3.021035e-04 1.517204e-04</span></span>
-<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="co">#&gt; X2 -0.0003021035  8.060696e-04 8.492543e-05</span></span>
-<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="co">#&gt; X3  0.0001517204  8.492543e-05 7.823621e-04</span></span></code></pre></div>
-<p>Results are numerically identical to <code>sandwich::vcovHC()</code>
-and <code>sandwich::vcovCL()</code> applied to a <code>glm</code> fit
-(Zeileis, Köll, and Graham, 2020) to floating-point precision. They work
-for sparse and <code>big.matrix</code> fits as well, since the full
-design matrix is preserved on the fitted object (as a reference, not
-copied).</p>
-<p><code>predict()</code> supports <code>se.fit = TRUE</code>:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>xnew <span class="ot">&lt;-</span> x[<span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, , drop <span class="ot">=</span> <span class="cn">FALSE</span>]</span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">predict</span>(fit, <span class="at">newdata =</span> xnew, <span class="at">type =</span> <span class="st">&quot;response&quot;</span>, <span class="at">se.fit =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt; $fit</span></span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt; [1] 0.6087584 0.5272820 0.4245913 0.5494426 0.6192178</span></span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt; $se.fit</span></span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt; [1] 0.03919065 0.03095856 0.03623790 0.03629691 0.03512202</span></span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt; $residual.scale</span></span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; [1] 1</span></span></code></pre></div>
+<div id="data-size-and-repeated-fitting" class="section level2">
+<h2>Data size and repeated fitting</h2>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">Computational setting</th>
+<th align="left">Available approach</th>
+<th align="left">Scope and guide</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Ordinary in-memory analysis</td>
+<td align="left">Formula and dense-design interfaces</td>
+<td align="left">Model-specific fitting with coefficient, prediction,
+and diagnostic methods</td>
+</tr>
+<tr class="even">
+<td align="left">Predictors with many zeros or stored outside ordinary R
+matrices</td>
+<td align="left">Sparse matrices and <code>bigmemory::big.matrix</code>
+inputs</td>
+<td align="left">GLMs; selected count interfaces also accept sparse
+designs. <a href="large-data-fastglm.html#sparse-and-mapped-matrices">Large-data
+guide</a></td>
+</tr>
+<tr class="odd">
+<td align="left">Data read repeatedly from files or databases</td>
+<td align="left"><code>fastglm_source()</code>, Arrow and DBI adapters,
+and streaming fitters</td>
+<td align="left">GLMs, negative-binomial, hurdle, two-part, and
+common-slope or partial ordinal models. <a href="large-data-fastglm.html">Streaming computation</a></td>
+</tr>
+<tr class="even">
+<td align="left">Several responses with the same predictors</td>
+<td align="left"><code>fastglm_prepare()</code> /
+<code>fastglm_batch()</code> and their ordinal counterparts</td>
+<td align="left">GLMs and common-slope or partial ordinal models;
+supported calculations are reused across responses. <a href="#repeated-outcomes-on-a-shared-design">Repeated outcomes</a></td>
+</tr>
+</tbody>
+</table>
+<p>Data representation changes the amount of retained information and
+the cost of rereading observations. It can therefore affect both fitting
+time and which later procedures are available. The <a href="large-data-fastglm.html">large-data vignette</a> explains these
+requirements. <a href="benchmarks-fastglm.html">Benchmark examples</a>
+examine speed together with numerical agreement.</p>
+<p>The remaining sections demonstrate the shared workflow with a Poisson
+model: <a href="#specifying-the-mean-model">specify the mean</a>, <a href="#choosing-a-decomposition">choose a numerical decomposition and
+assess convergence</a>, <a href="#inference-and-population-averages">quantify uncertainty</a>, and
+<a href="#repeated-outcomes-on-a-shared-design">reuse a design</a>.
+Generalized linear model fitting uses iteratively reweighted least
+squares, which updates coefficients through a sequence of weighted
+regressions.</p>
 </div>
-<div id="sparse-big.matrix-and-streaming-designs" class="section level1">
-<h1>Sparse, big.matrix, and streaming designs</h1>
-<p>For designs that are sparse, that live on disc, or that have to be
-built from a parquet / <em>arrow</em> / <em>DuckDB</em> source,
-<em>fastglm</em> provides three large-data paths that share a common
-streaming kernel and produce identical results:</p>
-<ul>
-<li><code>Matrix::dgCMatrix</code>: pass directly to
-<code>fastglm()</code>. Useful for one-hot encoded categoricals and
-high-dimensional sparse designs.</li>
-<li><code>bigmemory::big.matrix</code>: pass directly to
-<code>fastglm()</code>. The matrix is read in row-blocks and never fully
-materialised in memory.</li>
-<li><code>fastglm_streaming(chunk_callback, n_chunks, family)</code>: a
-user-supplied closure yields one row-block per call. The right path for
-fitting on a parquet dataset, <em>DuckDB</em> query, or any external
-columnar store.</li>
-</ul>
-<p>See <code>vignette(&quot;large-data-fastglm&quot;, package = &quot;fastglm&quot;)</code>
-for a detailed walk through all three paths. A short example:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>n <span class="ot">&lt;-</span> <span class="dv">4000</span></span>
-<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>X <span class="ot">&lt;-</span> <span class="fu">cbind</span>(<span class="dv">1</span>, <span class="fu">matrix</span>(<span class="fu">rnorm</span>(n <span class="sc">*</span> <span class="dv">3</span>), n, <span class="dv">3</span>))</span>
-<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">rbinom</span>(n, <span class="dv">1</span>, <span class="fu">plogis</span>(X <span class="sc">%*%</span> <span class="fu">c</span>(<span class="fl">0.2</span>, <span class="fl">0.4</span>, <span class="sc">-</span><span class="fl">0.2</span>, <span class="fl">0.3</span>)))</span>
-<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a></span>
-<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>chunk_size <span class="ot">&lt;-</span> <span class="dv">1000</span></span>
-<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>chunks <span class="ot">&lt;-</span> <span class="cf">function</span>(k) {</span>
-<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>    idx <span class="ot">&lt;-</span> ((k <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">*</span> chunk_size <span class="sc">+</span> <span class="dv">1</span>)<span class="sc">:</span>(k <span class="sc">*</span> chunk_size)</span>
-<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">X =</span> X[idx, , <span class="at">drop =</span> <span class="cn">FALSE</span>], <span class="at">y =</span> y[idx])</span>
-<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>}</span>
-<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a></span>
-<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>fit_stream <span class="ot">&lt;-</span> <span class="fu">fastglm_streaming</span>(chunks, <span class="at">n_chunks =</span> <span class="dv">4</span>, <span class="at">family =</span> <span class="fu">binomial</span>())</span>
-<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>fit_full   <span class="ot">&lt;-</span> <span class="fu">fastglm</span>(X, y, <span class="at">family =</span> <span class="fu">binomial</span>(), <span class="at">method =</span> <span class="dv">2</span>)</span>
-<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a></span>
-<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">abs</span>(<span class="fu">coef</span>(fit_stream) <span class="sc">-</span> <span class="fu">coef</span>(fit_full)))</span>
-<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a><span class="co">#&gt; [1] 1.111683e-07</span></span></code></pre></div>
 </div>
-<div id="native-families" class="section level1">
-<h1>Native families</h1>
-<p>For the most commonly-used <code>family</code>/<code>link</code>
-combinations, <em>fastglm</em> dispatches <code>variance()</code>,
-<code>mu.eta()</code>, <code>linkinv()</code>, and
-<code>dev.resids()</code> to inline C++ implementations rather than
-calling back into <code>R</code> once per IRLS iteration. The covered
-combinations are:</p>
-<ul>
-<li>gaussian (identity, log, inverse)</li>
-<li>binomial (logit, probit, cloglog, log)</li>
-<li>poisson (log, identity, sqrt)</li>
-<li>Gamma (log, inverse, identity)</li>
-<li>inverse.gaussian (1/mu^2, log, identity, inverse)</li>
-</ul>
-<p>Detection is automatic, if the <code>family</code> object matches one
-of the above, the native path is used; otherwise <em>fastglm</em> falls
-back to the <code>R</code>-callback path used in earlier versions. The
-native path is meaningfully faster on large <code>n</code> because it
-eliminates the per-iteration round-trip to <code>R</code> for each of
-the four family functions:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">library</span>(microbenchmark)</span>
-<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a></span>
-<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">7</span>)</span>
-<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>n <span class="ot">&lt;-</span> <span class="dv">50000</span>; p <span class="ot">&lt;-</span> <span class="dv">30</span></span>
-<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">rnorm</span>(n <span class="sc">*</span> p), n, p)</span>
-<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">rpois</span>(n, <span class="fu">exp</span>(x <span class="sc">%*%</span> <span class="fu">rnorm</span>(p) <span class="sc">*</span> <span class="fl">0.05</span> <span class="sc">+</span> <span class="dv">1</span>))</span>
-<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a></span>
-<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a><span class="do">## force the R-callback path by giving the family object an unrecognized name</span></span>
-<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a>disguise <span class="ot">&lt;-</span> <span class="cf">function</span>(fam) { fam<span class="sc">$</span>family <span class="ot">&lt;-</span> <span class="fu">paste0</span>(fam<span class="sc">$</span>family, <span class="st">&quot;*&quot;</span>); fam }</span>
-<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a></span>
-<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a>mb <span class="ot">&lt;-</span> <span class="fu">microbenchmark</span>(</span>
-<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>    <span class="at">native   =</span> <span class="fu">fastglm</span>(x, y, <span class="at">family =</span> <span class="fu">poisson</span>(),            <span class="at">method =</span> <span class="dv">2</span>),</span>
-<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>    <span class="at">callback =</span> <span class="fu">fastglm</span>(x, y, <span class="at">family =</span> <span class="fu">disguise</span>(<span class="fu">poisson</span>()),  <span class="at">method =</span> <span class="dv">2</span>),</span>
-<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a>    <span class="at">times =</span> <span class="dv">5</span><span class="dt">L</span></span>
-<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a>)</span>
-<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a><span class="fu">print</span>(mb)</span>
-<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a><span class="co">#&gt; Unit: milliseconds</span></span>
-<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a><span class="co">#&gt;      expr      min       lq     mean   median       uq      max neval cld</span></span>
-<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a><span class="co">#&gt;    native 20.26351 21.02849 21.55994 21.26838 22.09428 23.14503     5  a </span></span>
-<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a><span class="co">#&gt;  callback 29.96538 30.14283 31.94754 30.67452 32.47065 36.48430     5   b</span></span></code></pre></div>
-<p>The <em>fastglm</em> package switches transparently between the two
-paths; user code does not change.</p>
+<div id="specifying-the-mean-model" class="section level1">
+<h1>Specifying the mean model</h1>
+<p>A formula specifies the response and predictors using the same
+notation as <code>glm()</code>. The fitted object records factor levels,
+the coding of categories into predictor columns, and offsets so that
+subsequent predictions use the same model specification. An offset
+represents a known contribution to the linear predictor. In the
+following example, exposure multiplies the expected count, so its
+logarithm enters the linear predictor with coefficient one.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(fastglm)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">41</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>d <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">x=</span><span class="fu">rnorm</span>(<span class="dv">500</span>), <span class="at">group=</span><span class="fu">factor</span>(<span class="fu">rep</span>(letters[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>],<span class="dv">125</span>)),</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>                <span class="at">exposure=</span><span class="fu">runif</span>(<span class="dv">500</span>,.<span class="dv">5</span>,<span class="dv">2</span>))</span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>d<span class="sc">$</span>y <span class="ot">&lt;-</span> <span class="fu">rpois</span>(<span class="dv">500</span>, d<span class="sc">$</span>exposure<span class="sc">*</span><span class="fu">exp</span>(.<span class="dv">2</span><span class="fl">+.4</span><span class="sc">*</span>d<span class="sc">$</span>x))</span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">fastglm</span>(y<span class="sc">~</span>x<span class="sc">+</span>group<span class="sc">+</span><span class="fu">offset</span>(<span class="fu">log</span>(exposure)), <span class="at">data=</span>d, <span class="at">family=</span><span class="fu">poisson</span>(),</span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a>               <span class="at">method=</span><span class="st">&quot;auto&quot;</span>)</span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="fu">summary</span>(fit)</span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a><span class="co">#&gt; Generalized linear model</span></span>
+<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a><span class="co">#&gt; Call:</span></span>
+<span id="cb1-12"><a href="#cb1-12" tabindex="-1"></a><span class="co">#&gt; fastglm::fastglm(data = d, family = poisson(), method = &quot;auto&quot;, </span></span>
+<span id="cb1-13"><a href="#cb1-13" tabindex="-1"></a><span class="co">#&gt;     formula = y ~ x + group + offset(log(exposure)))</span></span>
+<span id="cb1-14"><a href="#cb1-14" tabindex="-1"></a><span class="co">#&gt; Family: poisson (log link)</span></span>
+<span id="cb1-15"><a href="#cb1-15" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-16"><a href="#cb1-16" tabindex="-1"></a><span class="co">#&gt; Coefficients:</span></span>
+<span id="cb1-17"><a href="#cb1-17" tabindex="-1"></a><span class="co">#&gt;             Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
+<span id="cb1-18"><a href="#cb1-18" tabindex="-1"></a><span class="co">#&gt; (Intercept)  0.04085    0.07493   0.545   0.5856    </span></span>
+<span id="cb1-19"><a href="#cb1-19" tabindex="-1"></a><span class="co">#&gt; x            0.41174    0.03465  11.884   &lt;1e-04 ***</span></span>
+<span id="cb1-20"><a href="#cb1-20" tabindex="-1"></a><span class="co">#&gt; groupb       0.16419    0.09947   1.651   0.0988 .  </span></span>
+<span id="cb1-21"><a href="#cb1-21" tabindex="-1"></a><span class="co">#&gt; groupc       0.15478    0.10065   1.538   0.1241    </span></span>
+<span id="cb1-22"><a href="#cb1-22" tabindex="-1"></a><span class="co">#&gt; groupd       0.14228    0.10240   1.389   0.1647    </span></span>
+<span id="cb1-23"><a href="#cb1-23" tabindex="-1"></a><span class="co">#&gt; ---</span></span>
+<span id="cb1-24"><a href="#cb1-24" tabindex="-1"></a><span class="co">#&gt; Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</span></span>
+<span id="cb1-25"><a href="#cb1-25" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-26"><a href="#cb1-26" tabindex="-1"></a><span class="co">#&gt;  Dispersion Null deviance Null df Deviance Residual df  AIC</span></span>
+<span id="cb1-27"><a href="#cb1-27" tabindex="-1"></a><span class="co">#&gt;           1         688.8     499    548.6         495 1504</span></span>
+<span id="cb1-28"><a href="#cb1-28" tabindex="-1"></a><span class="co">#&gt; Convergence: converged (5 iterations)</span></span>
+<span id="cb1-29"><a href="#cb1-29" tabindex="-1"></a><span class="fu">predict</span>(fit, <span class="at">newdata=</span>d[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>,], <span class="at">type=</span><span class="st">&quot;response&quot;</span>, <span class="at">se.fit=</span><span class="cn">TRUE</span>)</span>
+<span id="cb1-30"><a href="#cb1-30" tabindex="-1"></a><span class="co">#&gt; Predictions with standard errors</span></span>
+<span id="cb1-31"><a href="#cb1-31" tabindex="-1"></a><span class="co">#&gt; Scale: response mean</span></span>
+<span id="cb1-32"><a href="#cb1-32" tabindex="-1"></a><span class="co">#&gt; Residual scale: 1</span></span>
+<span id="cb1-33"><a href="#cb1-33" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-34"><a href="#cb1-34" tabindex="-1"></a><span class="co">#&gt;  Row Estimate Std. Error</span></span>
+<span id="cb1-35"><a href="#cb1-35" tabindex="-1"></a><span class="co">#&gt;    1   0.8993    0.07737</span></span>
+<span id="cb1-36"><a href="#cb1-36" tabindex="-1"></a><span class="co">#&gt;    2   2.2479    0.15343</span></span>
+<span id="cb1-37"><a href="#cb1-37" tabindex="-1"></a><span class="co">#&gt;    3   2.1857    0.15936</span></span>
+<span id="cb1-38"><a href="#cb1-38" tabindex="-1"></a><span class="co">#&gt;    4   2.6889    0.21223</span></span></code></pre></div>
+<p>For computations that already provide a design matrix,
+<code>fastglm(X, y, family)</code> avoids constructing a model frame.
+Prediction from a matrix fit requires the same column order as the
+fitted design. New offsets can be supplied through the
+<code>offset</code> argument to <code>predict()</code>. The fitting
+method can also be used through
+<code>glm(..., method=fastglm_fit)</code>.</p>
+<p>The optional <code>broom::tidy()</code> and
+<code>broom::glance()</code> methods provide coefficient and model
+summaries for matrix and formula fits. Standard <code>update()</code>
+calls can revise a formula specification.</p>
+<p>Fitted models and their summaries use a common display: a model
+heading, labeled coefficient tables, and fitting status. The same
+conventions apply to count, ordinal, streaming, and bootstrap results.
+<code>print(summary(fit),digits=3)</code> controls displayed precision
+while retaining the original numerical values. Predictions requested
+with <code>se.fit=TRUE</code> place estimates beside their standard
+errors. Their <code>as.data.frame()</code> method provides a numeric
+table for reporting; the original vectors or matrices remain accessible
+as <code>$fit</code> and <code>$se.fit</code>. For matrix predictions,
+the table identifies both the observation row and the component, such as
+an outcome category. The display shows at most 20 rows by default, with
+<code>max.rows=Inf</code> displaying the full table.</p>
+<p>Hypothesis-test results from <code>fastglm_wald_test()</code>,
+<code>fastglm_profile_test()</code>, <code>fastglm_score_test()</code>,
+and <code>fastglm_po_test()</code> use a compact statistic,
+degrees-of-freedom, and p-value table. Their
+<code>as.data.frame()</code> and optional <code>broom::tidy()</code>
+methods provide full-precision numeric results for reports, with
+<code>details=TRUE</code> adding method descriptions and explanations
+for unavailable tests. Profile confidence intervals also print as a
+compact table while retaining endpoint and fit diagnostics as
+attributes.</p>
+<p>For grouped binomial observations, the response can be a two-column
+matrix containing successes and failures. Trial totals enter the
+initialized prior weights and are retained for likelihood calculations.
+Observations with zero prior weight do not contribute to the residual
+degrees of freedom.</p>
 </div>
-<div id="negative-binomial-hurdle-zero-inflation-and-firth-logistic" class="section level1">
-<h1>Negative binomial, hurdle, zero-inflation, and Firth logistic</h1>
-<p>A handful of regressions that come up often in practice are not
-standard GLMs but build on the same IRLS machinery. <em>fastglm</em>
-provides dedicated fitting functions for these:</p>
-<ul>
-<li><strong><code>fastglm_nb()</code></strong> — negative-binomial
-regression with the dispersion <code>theta</code> estimated jointly with
-<code>beta</code>. Plays the same role as <code>MASS::glm.nb()</code>
-but runs the joint <code>(beta, theta)</code> MLE entirely in C++ (IRLS
-for <code>beta</code>, Brent for <code>theta</code>).</li>
-<li><strong><code>firth = TRUE</code></strong> — a flag on
-<code>fastglm()</code> / <code>fastglm_fit()</code> that activates
-Firth’s bias-reducing penalty on the score. Useful for binary logistic
-regression under separation or in small samples; analogous to
-<code>logistf::logistf()</code>.</li>
-<li><strong><code>fastglm_hurdle()</code></strong> — a two-part count
-model: a binary regression for whether <code>y &gt; 0</code>, plus a
-zero-truncated Poisson or NB regression on the positive subset. The two
-parts factorize, and both are fit by the same C++ IRLS solver. Same
-model as <code>pscl::hurdle()</code>.</li>
-<li><strong><code>fastglm_zi()</code></strong> — a zero-inflated Poisson
-or NB regression: a binary inflation component overlaid on the original
-count distribution, fit by an EM algorithm in C++ with closed-form
-posterior responsibilities and an analytical observed-information
-<code>vcov</code>. Same model as <code>pscl::zeroinfl()</code>.</li>
-</ul>
-<p>All four take the standard <em>fastglm</em> tuning options
-(<code>method</code>, <code>tol</code>, <code>maxit</code>) and return
-objects with the usual <code>coef()</code>, <code>vcov()</code>,
-<code>predict()</code>, <code>logLik()</code> methods.
-<code>fastglm_hurdle()</code> and <code>fastglm_zi()</code> use the
-<code>Formula</code> package’s two-RHS syntax
-<code>y ~ x1 + x2 | z1 + z2</code> to specify different designs for the
-count and zero parts. See
-<code>vignette(&quot;count-firth-fastglm&quot;, package = &quot;fastglm&quot;)</code> for
-examples and timing comparisons against the canonical reference
-packages.</p>
+<div id="choosing-a-decomposition" class="section level1">
+<h1>Choosing a decomposition</h1>
+<p>Each coefficient update requires solving a weighted regression. A
+matrix decomposition rewrites the design or its crossproduct in a form
+that makes this calculation possible. The available decompositions
+differ in speed and in their ability to cope with predictors that are
+redundant or nearly redundant.</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Name</th>
+<th align="right">Integer</th>
+<th align="left">Decomposition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left"><code>qr</code></td>
+<td align="right">0</td>
+<td align="left">Column-pivoted QR</td>
+</tr>
+<tr class="even">
+<td align="left"><code>qr_unpivoted</code></td>
+<td align="right">1</td>
+<td align="left">Unpivoted QR, requiring full rank</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>llt</code></td>
+<td align="right">2</td>
+<td align="left">Cholesky</td>
+</tr>
+<tr class="even">
+<td align="left"><code>ldlt</code></td>
+<td align="right">3</td>
+<td align="left">LDLT</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>qr_full</code></td>
+<td align="right">4</td>
+<td align="left">Full-pivoted QR</td>
+</tr>
+<tr class="even">
+<td align="left"><code>svd</code></td>
+<td align="right">5</td>
+<td align="left">Singular value decomposition</td>
+</tr>
+</tbody>
+</table>
+<p>For ordinary matrices, <code>method=&quot;auto&quot;</code> first rescales
+predictor columns to reduce differences in their numerical magnitude,
+then attempts Cholesky. If the calculation detects redundant or nearly
+redundant predictors, it uses column-pivoted QR, which reorders columns
+to identify a set that can be estimated separately. The returned
+<code>solver</code> and <code>solver.fallback</code> entries record the
+choice.</p>
+<p>A coefficient is aliased when its effect cannot be distinguished from
+a combination of other predictor effects. Pivoted QR reports such
+coefficients as <code>NA</code>; fitted means use the remaining
+coefficients. Predictions for new rows require the same dependence
+between predictors as in the fitted design. Sparse matrices and matrices
+accessed through <code>bigmemory</code> support the Cholesky methods and
+require that all coefficient effects can be distinguished.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">fastglm_diagnostics</span>(fit)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt; Numerical diagnostics</span></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt; Convergence: converged (5 iterations)</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; Solver: Cholesky (LLT)</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt; Estimable coefficients (rank): 5</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt; Boundary flag: no</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt;                        Check     Value</span></span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt;  Standardized ordinary score 2.131e-11</span></span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt;  Covariance condition number     33.62</span></span></code></pre></div>
+<p>A convergence flag means that the algorithm met its stopping rule. It
+does not establish that every coefficient is well estimated.
+<code>fastglm_diagnostics()</code> reports the score, which measures how
+much the fitting objective would change with a small coefficient change,
+and a standardized version that accounts for predictor scale. A large
+standardized score can indicate incomplete numerical convergence. Fitted
+probabilities near zero or one and nearly redundant predictors also
+warrant examination. In logistic regression, predictors that perfectly
+separate successes from failures can prevent finite maximum likelihood
+estimates; the bias-reduction vignette describes an alternative for that
+setting.</p>
+<p>The rank is the number of coefficient effects that can be estimated
+separately. A large covariance condition number indicates that some
+combinations of coefficient estimates are much less precisely determined
+than others; it depends on the predictor units as well as their
+dependence. The boundary flag records whether the fit encountered a
+parameter boundary. An unavailable check is labeled explicitly.
+<code>as.data.frame(fastglm_diagnostics(fit))</code> retains numeric and
+logical fields for further analysis, with vector-valued details, such as
+the individual coefficient scores, stored in list columns.</p>
+<p>For an ordinal model,
+<code>fastglm_diagnostics(fit,boundary=TRUE)</code> also identifies the
+rows and outcome categories with the smallest fitted probabilities and
+adjacent cumulative-predictor gaps. Their observed frequencies help
+distinguish a rare fitted outcome from an unobserved category at a
+particular predictor pattern. This optional calculation rereads a
+streamed source once and retains only a few extreme rows. Small
+probabilities can help explain numerical difficulty, but do not by
+themselves establish that a solution is absent.</p>
 </div>
-<div id="three-r-entry-points" class="section level1">
-<h1>Three R entry points</h1>
-<p>There are three <code>R</code>-side functions to fit a GLM with
-<em>fastglm</em>. They all call into the same C++ solver, but differ in
-how much of base R’s machinery they wrap around it:</p>
-<ul>
-<li><strong><code>fastglm()</code></strong> is the top-level S3
-function. It returns an object of class <code>&quot;fastglm&quot;</code> with
-deviance, AIC, null deviance, residuals, etc. populated for interactive
-use.</li>
-<li><strong><code>fastglm_fit()</code></strong> is designed to be passed
-as <code>method = fastglm_fit</code> to base <code>glm()</code>. The
-returned object inherits from <code>&quot;fastglmFit&quot;</code> so that
-<code>glm()</code>’s formula/data handling, <code>update()</code>,
-<code>predict()</code>, etc. all work on top.</li>
-<li><strong><code>fastglmPure()</code></strong> is the lowest-level
-wrapper: no dispersion, no AIC, no null-deviance computation. Use this
-when calling <em>fastglm</em> from another package and you only need the
-coefficients.</li>
-</ul>
+<div id="inference-and-population-averages" class="section level1">
+<h1>Inference and population averages</h1>
+<p>The coefficient covariance describes uncertainty in each estimate and
+how estimation errors in different coefficients vary together. Its
+diagonal entries are squared standard errors. The model-based
+calculation uses the fitted response distribution and is evaluated at
+the reported coefficient estimates.</p>
+<p><code>confint()</code> constructs Wald intervals by adding and
+subtracting a multiple of each standard error. The multiplier comes from
+a normal reference distribution when dispersion is fixed and a Student t
+distribution when dispersion is estimated. Dispersion describes the
+response variation beyond the family’s mean-variance relationship. These
+intervals use a local approximation around the estimate;
+profile-likelihood intervals instead refit the other parameters while
+varying the parameter of interest.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">vcov</span>(fit)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="co">#&gt;               (Intercept)             x        groupb        groupc</span></span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="co">#&gt; (Intercept)  0.0056142098 -0.0006491624 -0.0053535815 -0.0053766734</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="co">#&gt; x           -0.0006491624  0.0012004262  0.0001672107  0.0002099121</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a><span class="co">#&gt; groupb      -0.0053535815  0.0001672107  0.0098947441  0.0052923971</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co">#&gt; groupc      -0.0053766734  0.0002099121  0.0052923971  0.0101307820</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="co">#&gt; groupd      -0.0053841673  0.0002237697  0.0052943274  0.0053022873</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="co">#&gt;                    groupd</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt; (Intercept) -0.0053841673</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co">#&gt; x            0.0002237697</span></span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="co">#&gt; groupb       0.0052943274</span></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co">#&gt; groupc       0.0053022873</span></span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="co">#&gt; groupd       0.0104862176</span></span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="fu">confint</span>(fit, <span class="at">parm=</span><span class="st">&quot;x&quot;</span>)</span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt;       2.5 %    97.5 %</span></span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="co">#&gt; x 0.3438348 0.4796492</span></span>
+<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="fu">vcov</span>(fit, <span class="at">type=</span><span class="st">&quot;HC1&quot;</span>)</span>
+<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a><span class="co">#&gt;               (Intercept)             x        groupb        groupc</span></span>
+<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a><span class="co">#&gt; (Intercept)  0.0051767554 -5.571796e-04 -0.0049406554 -0.0049673130</span></span>
+<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a><span class="co">#&gt; x           -0.0005571796  1.005518e-03  0.0001305478  0.0001789602</span></span>
+<span id="cb3-21"><a href="#cb3-21" tabindex="-1"></a><span class="co">#&gt; groupb      -0.0049406554  1.305478e-04  0.0092242203  0.0048914533</span></span>
+<span id="cb3-22"><a href="#cb3-22" tabindex="-1"></a><span class="co">#&gt; groupc      -0.0049673130  1.789602e-04  0.0048914533  0.0095847217</span></span>
+<span id="cb3-23"><a href="#cb3-23" tabindex="-1"></a><span class="co">#&gt; groupd      -0.0049029537  5.966093e-05  0.0048747259  0.0048792052</span></span>
+<span id="cb3-24"><a href="#cb3-24" tabindex="-1"></a><span class="co">#&gt;                    groupd</span></span>
+<span id="cb3-25"><a href="#cb3-25" tabindex="-1"></a><span class="co">#&gt; (Intercept) -4.902954e-03</span></span>
+<span id="cb3-26"><a href="#cb3-26" tabindex="-1"></a><span class="co">#&gt; x            5.966093e-05</span></span>
+<span id="cb3-27"><a href="#cb3-27" tabindex="-1"></a><span class="co">#&gt; groupb       4.874726e-03</span></span>
+<span id="cb3-28"><a href="#cb3-28" tabindex="-1"></a><span class="co">#&gt; groupc       4.879205e-03</span></span>
+<span id="cb3-29"><a href="#cb3-29" tabindex="-1"></a><span class="co">#&gt; groupd       9.933362e-03</span></span></code></pre></div>
+<p>The <code>type=&quot;HC1&quot;</code> calculation estimates coefficient
+uncertainty from the observed variability in contributions to the
+estimating equations, with a finite-sample rescaling. This is useful
+when the fitted mean model is appropriate but the response variance
+differs from the family specification. This form of robust covariance is
+also called a sandwich covariance.</p>
+<p>When observations are correlated within groups, such as repeated
+measurements on patients, <code>fastglm_vcov()</code> can sum those
+contributions within each group before estimating uncertainty. The
+groups, called clusters, are assumed independent of one another.
+Reliable approximation generally requires sufficiently many independent
+clusters. The calculation reads predictor rows in blocks and retains a
+contribution vector for each cluster, so its memory requirement depends
+on both block size and the number of clusters.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>cluster <span class="ot">&lt;-</span> <span class="fu">rep</span>(<span class="fu">seq_len</span>(<span class="dv">100</span>), <span class="at">each=</span><span class="dv">5</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>robust <span class="ot">&lt;-</span> <span class="fu">fastglm_vcov</span>(fit, <span class="at">type=</span><span class="st">&quot;HC1&quot;</span>, <span class="at">cluster=</span>cluster)</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="fu">fastglm_average</span>(fit, <span class="at">vcov.=</span>robust)</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="co">#&gt;   estimate  std.error conf.low conf.high</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="co">#&gt; 1    1.614 0.05835132 1.499634  1.728366</span></span></code></pre></div>
+<p><code>fastglm_average()</code> estimates an average response over a
+supplied covariate distribution. Its standard error accounts for
+coefficient uncertainty while conditioning on those covariates. A
+<code>contrast</code> function can alter the design matrix, yielding the
+average difference between transformed and original predictions. Such a
+contrast describes the fitted mean model; a causal interpretation
+requires additional identification assumptions.</p>
+<div id="joint-coefficient-tests" class="section level2">
+<h2>Joint coefficient tests</h2>
+<p>A categorical predictor generally contributes several coefficients.
+Testing those coefficients together addresses whether that predictor
+contributes to the specified mean model, conditional on the remaining
+terms. <code>fastglm_wald_test()</code> selects all columns associated
+with a formula term and combines their estimates and covariance in a
+joint Wald statistic.</p>
+<p>The same interface supports ordinal, truncated-count, hurdle,
+zero-inflated, and two-part models. For models with two components,
+<code>component</code> selects the regression being tested; its default
+tests the term in both components where present. The count and
+semicontinuous-outcome vignettes illustrate these choices and their
+interpretation.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">fastglm_wald_test</span>(fit,<span class="at">terms=</span><span class="st">&quot;group&quot;</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="co">#&gt; Terms: group</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a><span class="co">#&gt; Covariance: model-based</span></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt;      3.487  3  0.3225</span></span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="co">#&gt;        Estimate Std. Error    Null</span></span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co">#&gt; groupb  0.16419    0.09947 0.00000</span></span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a><span class="co">#&gt; groupc  0.15478    0.10065 0.00000</span></span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a><span class="co">#&gt; groupd  0.14228    0.10240 0.00000</span></span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="fu">fastglm_wald_test</span>(fit,<span class="at">terms=</span><span class="st">&quot;group&quot;</span>,<span class="at">vcov.=</span>robust)</span>
+<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a><span class="co">#&gt; Terms: group</span></span>
+<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a><span class="co">#&gt; Covariance: supplied coefficient covariance</span></span>
+<span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb5-25"><a href="#cb5-25" tabindex="-1"></a><span class="co">#&gt;      3.599  3  0.3081</span></span>
+<span id="cb5-26"><a href="#cb5-26" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-27"><a href="#cb5-27" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb5-28"><a href="#cb5-28" tabindex="-1"></a><span class="co">#&gt;        Estimate Std. Error    Null</span></span>
+<span id="cb5-29"><a href="#cb5-29" tabindex="-1"></a><span class="co">#&gt; groupb  0.16419    0.09088 0.00000</span></span>
+<span id="cb5-30"><a href="#cb5-30" tabindex="-1"></a><span class="co">#&gt; groupc  0.15478    0.10315 0.00000</span></span>
+<span id="cb5-31"><a href="#cb5-31" tabindex="-1"></a><span class="co">#&gt; groupd  0.14228    0.10451 0.00000</span></span>
+<span id="cb5-32"><a href="#cb5-32" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-33"><a href="#cb5-33" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb5-34"><a href="#cb5-34" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span></code></pre></div>
+<p>The second test uses the cluster covariance calculated above. Both
+tests use a first-order chi-square reference; the covariance must
+correspond to the sampling structure. Small samples or few independent
+clusters can make this approximation inaccurate. A test of a main-effect
+term in a model containing interactions depends on the predictor coding
+and reference values. It does not test every effect involving that
+variable.</p>
+<p>A named contrast specifies a linear combination of coefficients. For
+example, the difference between the coefficients for groups c and b
+describes their log mean ratio at equal values of the other predictors
+in this model.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>group_comparison <span class="ot">&lt;-</span> <span class="fu">fastglm_wald_test</span>(fit,<span class="at">contrast=</span><span class="fu">c</span>(<span class="at">groupc=</span><span class="dv">1</span>,<span class="at">groupb=</span><span class="sc">-</span><span class="dv">1</span>))</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>group_comparison</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co">#&gt; Covariance: model-based</span></span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt;   0.009368  1  0.9229</span></span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt;             Estimate Std. Error      Null</span></span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt; Contrast 1 -0.009405   0.097163  0.000000</span></span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="fu">as.data.frame</span>(group_comparison)</span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a><span class="co">#&gt;     statistic df   p.value null.estimation available</span></span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="co">#&gt; 1 0.009368425  1 0.9228927            &lt;NA&gt;      TRUE</span></span></code></pre></div>
+<p>Matrix contrasts permit several comparisons in a joint test, and
+<code>null</code> supplies their hypothesized values. Omitted named
+coefficients receive weight zero. The returned result retains the
+contrast estimates and standard errors at full precision. Nonestimable
+comparisons, unsuccessful fits, and unusable covariance matrices produce
+an unavailable test with an explanation.</p>
 </div>
-<div id="references" class="section level1">
-<h1>References</h1>
-<ul>
-<li><p>Marschner, I. C. (2011). glm2: Fitting generalized linear models
-with convergence problems. <em>The R Journal</em>, 3(2), 12–15. <a href="doi:10.32614/RJ-2011-012" class="uri">doi:10.32614/RJ-2011-012</a></p></li>
-<li><p>Bates, D. and Eddelbuettel, D. (2013). Fast and elegant numerical
-linear algebra using the RcppEigen package. <em>Journal of Statistical
-Software</em>, 52(5), 1–24. <a href="doi:10.18637/jss.v052.i05" class="uri">doi:10.18637/jss.v052.i05</a></p></li>
-<li><p>Zeileis, A., Köll, S., and Graham, N. (2020). Various versatile
-variances: An object-oriented implementation of clustered covariances in
-R. <em>Journal of Statistical Software</em>, 95(1), 1–36. <a href="doi:10.18637/jss.v095.i01" class="uri">doi:10.18637/jss.v095.i01</a></p></li>
-</ul>
+</div>
+<div id="repeated-outcomes-on-a-shared-design" class="section level1">
+<h1>Repeated outcomes on a shared design</h1>
+<p>Repeated outcome analyses often use the same predictors and weights.
+<code>fastglm_prepare()</code> saves this common design and the
+information needed to construct predictors consistently. For Gaussian
+regression with an identity link, the expensive matrix decomposition
+depends only on the predictors and weights, so it can be reused across
+outcomes. Certain bias-reduced models also permit this reuse, as
+illustrated below. For models whose fitting weights change with the
+response and fitted mean, the preceding fit can still provide useful
+starting coefficients. Reusing those starting coefficients is called a
+warm start.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>X <span class="ot">&lt;-</span> <span class="fu">model.matrix</span>(<span class="sc">~</span>x<span class="sc">+</span>group, d)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>Y <span class="ot">&lt;-</span> <span class="fu">cbind</span>(<span class="at">outcome1=</span><span class="fu">rnorm</span>(<span class="fu">nrow</span>(d))<span class="sc">+</span>.<span class="dv">4</span><span class="sc">*</span>d<span class="sc">$</span>x,</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>           <span class="at">outcome2=</span><span class="fu">rnorm</span>(<span class="fu">nrow</span>(d))<span class="sc">-</span>.<span class="dv">2</span><span class="sc">*</span>d<span class="sc">$</span>x)</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>design <span class="ot">&lt;-</span> <span class="fu">fastglm_prepare</span>(X)</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>models <span class="ot">&lt;-</span> <span class="fu">fastglm_batch</span>(design, Y)</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="fu">vapply</span>(models, <span class="cf">function</span>(z) <span class="fu">coef</span>(z)[<span class="st">&quot;x&quot;</span>], <span class="fu">numeric</span>(<span class="dv">1</span>))</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt;   outcome1   outcome2 </span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt;  0.3993786 -0.2001571</span></span></code></pre></div>
+<p>Bias-reduced models can be fitted to several outcomes by specifying
+<code>firth=TRUE</code>. This setting can be saved in the prepared
+design or supplied to <code>fastglm_batch()</code>. For
+Gaussian-identity, Gamma-log, and Poisson-square-root models, the
+weights in the regression updates are constant across iterations when
+the predictors and prior weights are fixed. The default automatic solver
+and explicit Cholesky method <code>&quot;llt&quot;</code> reuse the common matrix
+decomposition and row-influence calculations across responses.
+Dispersion and response-dependent coefficient adjustments are still
+estimated separately for each outcome.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">148</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>mu1 <span class="ot">&lt;-</span> <span class="fu">exp</span>(.<span class="dv">2</span><span class="fl">+.3</span><span class="sc">*</span>d<span class="sc">$</span>x)</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>mu2 <span class="ot">&lt;-</span> <span class="fu">exp</span>(.<span class="dv">5</span><span class="fl">-.2</span><span class="sc">*</span>d<span class="sc">$</span>x)</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>Y_positive <span class="ot">&lt;-</span> <span class="fu">cbind</span>(<span class="at">outcome1=</span><span class="fu">rgamma</span>(<span class="fu">nrow</span>(d),<span class="at">shape=</span><span class="dv">3</span>,<span class="at">scale=</span>mu1<span class="sc">/</span><span class="dv">3</span>),</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>                    <span class="at">outcome2=</span><span class="fu">rgamma</span>(<span class="fu">nrow</span>(d),<span class="at">shape=</span><span class="dv">3</span>,<span class="at">scale=</span>mu2<span class="sc">/</span><span class="dv">3</span>))</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>design_firth <span class="ot">&lt;-</span> <span class="fu">fastglm_prepare</span>(X,<span class="at">firth=</span><span class="cn">TRUE</span>)</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>models_firth <span class="ot">&lt;-</span> <span class="fu">fastglm_batch</span>(design_firth,Y_positive,<span class="at">family=</span><span class="fu">Gamma</span>(<span class="st">&quot;log&quot;</span>))</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="fu">vapply</span>(models_firth,<span class="cf">function</span>(z) <span class="fu">coef</span>(z)[<span class="st">&quot;x&quot;</span>],<span class="fu">numeric</span>(<span class="dv">1</span>))</span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="co">#&gt;   outcome1   outcome2 </span></span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="co">#&gt;  0.3439294 -0.1699144</span></span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a><span class="fu">vapply</span>(models_firth,<span class="cf">function</span>(z) z<span class="sc">$</span>dispersion,<span class="fu">numeric</span>(<span class="dv">1</span>))</span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a><span class="co">#&gt;  outcome1  outcome2 </span></span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a><span class="co">#&gt; 0.3184030 0.3653628</span></span></code></pre></div>
+<p>Changing the predictors or weights rebuilds the saved calculations.
+Offsets and outcomes may differ while the common matrix decomposition is
+retained because they do not determine that decomposition for these
+family-link combinations. Other supported Firth models also work through
+the batch interface, using their ordinary fitting calculations. Explicit
+QR, SVD, and LDLT choices retain their requested solver. The amount of
+time saved therefore depends on the model, the number of responses, and
+the cost of the shared setup.</p>
+<p><code>workers</code> sets the number of R processes used to fit
+outcomes concurrently and defaults to one. Using more processes can
+shorten elapsed time when individual fits are expensive enough to offset
+process startup and data-transfer costs. Each process needs its own
+working memory, and concurrent fits cannot use the immediately preceding
+result as a starting value. These costs should be included when
+comparing runtimes.</p>
+<p>When only coefficients and fitted means are required,
+<code>inference=&quot;none&quot;</code> skips the final covariance calculation.
+<code>inference=&quot;diagonal&quot;</code> retains standard errors without
+retaining the full covariance; it does not avoid computing that
+covariance. <code>retain.data=FALSE</code> omits the design and response
+from the returned object. Subsequent procedures that require omitted
+information must be supplied with new data or require a refit.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>compact <span class="ot">&lt;-</span> <span class="fu">fastglm</span>(X, d<span class="sc">$</span>y, <span class="fu">poisson</span>(), <span class="at">method=</span><span class="st">&quot;auto&quot;</span>,</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>                   <span class="at">inference=</span><span class="st">&quot;none&quot;</span>, <span class="at">retain.data=</span><span class="cn">FALSE</span>)</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="fu">coef</span>(compact)</span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="co">#&gt; (Intercept)           x      groupb      groupc      groupd </span></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a><span class="co">#&gt;   0.2815626   0.3816119   0.1907137   0.1412245   0.1168384</span></span></code></pre></div>
 </div>
 
 

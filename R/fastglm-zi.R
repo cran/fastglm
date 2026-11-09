@@ -105,19 +105,19 @@ fastglm_zi <- function(formula, data, subset, na.action,
     X_count <- model.matrix(mt_count, mf)
     Z_zero  <- model.matrix(mt_zero,  mf)
 
+    if (ncol(X_count) == 0L || ncol(Z_zero) == 0L) stop("both components require at least one coefficient", call. = FALSE)
     wt <- model.weights(mf)
     if (is.null(wt)) wt <- rep(1, n)
     if (!is.numeric(wt) || any(wt < 0))
         stop("'weights' must be non-negative.", call. = FALSE)
 
-    off <- model.offset(mf)
-    if (is.null(off)) {
-        off_count <- rep(0, n); off_zero <- rep(0, n)
-    } else if (is.matrix(off) && ncol(off) == 2L) {
-        off_count <- as.numeric(off[, 1L]); off_zero <- as.numeric(off[, 2L])
-    } else {
-        off_count <- as.numeric(off);       off_zero <- as.numeric(off)
-    }
+    offsets <- .component_offsets(mf, list(count = mt_count, zero = mt_zero))
+    off_count <- offsets$count; off_zero <- offsets$zero
+    .validate_glm_data(X_count, Y_resp, wt, off_count)
+    .validate_glm_data(Z_zero, Y_resp, wt, off_zero)
+    if (any(Y_resp != floor(Y_resp))) stop("count responses must be integers", call. = FALSE)
+    .check_iterations(tol, maxit)
+    .check_iterations(theta.tol, theta.maxit)
 
     zero_family <- switch(link,
                           "logit"   = binomial("logit"),
@@ -213,12 +213,14 @@ fastglm_zi <- function(formula, data, subset, na.action,
         em_iter        = res$em_iter,
         converged      = res$converged,
         n              = res$n,
-        df.residual    = n - res$df,
+        df.residual    = sum(wt > 0) - res$df,
         dist           = dist,
         link           = link,
         formula        = f,
         terms          = list(count = mt_count, zero = mt_zero),
-        levels         = .getXlevels(mt_count, mf),
+        assign         = list(count=attr(X_count,"assign"),zero=attr(Z_zero,"assign")),
+        levels         = lapply(mf[vapply(mf, is.factor, logical(1))], levels),
+        na.action      = attr(mf, "na.action"),
         contrasts      = list(count = attr(X_count, "contrasts"),
                               zero  = attr(Z_zero,  "contrasts")),
         weights        = wt,
@@ -228,10 +230,21 @@ fastglm_zi <- function(formula, data, subset, na.action,
         eta_zero       = res$eta_zero,
         call           = cl
     )
+    out$vcov.full <- out$vcov
+    out$vcov <- out$vcov[seq_len(p_c + p_z), seq_len(p_c + p_z), drop = FALSE]
+    if (!out$converged) warning("two-component model did not converge", call. = FALSE)
+    if (any(!is.finite(diag(out$vcov)))) warning("observed information is not positive definite; covariance is unavailable", call. = FALSE)
     if (model) out$model <- mf
     if (y)     out$y     <- Y_resp
     if (x)     out$x     <- list(count = X_count, zero = Z_zero)
     class(out) <- "fastglm_zi"
+    out$theta.estimated <- dist=="negbin"
+    out$theta.boundary <- .count_theta_boundary(out)
+    if(out$theta.boundary) {
+        out$SE.theta<-NA_real_
+        out$vcov.full[,]<-NA_real_;out$vcov[,]<-NA_real_
+        warning("theta is on a numerical boundary; regular mixture covariance is unavailable",call.=FALSE)
+    }
     out
 }
 
@@ -250,9 +263,18 @@ coef.fastglm_zi <- function(object, model = c("full", "count", "zero"), ...)
 }
 
 #' @export
-vcov.fastglm_zi <- function(object, model = c("full", "count", "zero"), ...)
+vcov.fastglm_zi <- function(object, model = c("full", "count", "zero"), full = FALSE,
+                           type=NULL,cluster=NULL,...)
 {
     model <- match.arg(model)
+    if(!is.null(type) || !is.null(cluster)) {
+        v <- fastglm_vcov(object,if(is.null(type)) "HC0" else type,cluster=cluster,full=full,...)
+        if(model=="full") return(v)
+        p <- length(object$coefficients$count)
+        i <- if(model=="count") seq_len(p) else p+seq_along(object$coefficients$zero)
+        return(v[i,i,drop=FALSE])
+    }
+    if (full) return(object$vcov.full)
     if (model == "full") return(object$vcov)
     p_c <- length(object$coefficients$count)
     p_z <- length(object$coefficients$zero)
@@ -265,25 +287,22 @@ logLik.fastglm_zi <- function(object, ...)
 {
     df <- length(object$coefficients$count) + length(object$coefficients$zero) +
           (object$dist == "negbin")
-    structure(object$loglik, df = df, nobs = object$n,
+    structure(object$loglik, df = df, nobs = nobs(object),
               class = "logLik")
 }
 
-#' @export
+#' @exportS3Method print fastglm_zi
 print.fastglm_zi <- function(x, digits = max(3, getOption("digits") - 3), ...)
 {
-    cat("\nfastglm_zi:  zero-inflated ", x$dist, " (zero link = ", x$link,
-        ")\n", sep = "")
-    cat("Call:  "); print(x$call)
-    cat("\nCount model coefficients (", x$dist, "):\n", sep = "")
-    print(format(x$coefficients$count, digits = digits), quote = FALSE)
-    cat("\nZero-inflation coefficients (binomial,", x$link, "):\n")
-    print(format(x$coefficients$zero, digits = digits), quote = FALSE)
-    if (x$dist == "negbin")
-        cat("\nTheta:", format(x$theta, digits = digits),
-            "  SE:", format(x[["SE.theta"]], digits = digits), "\n")
-    cat("Log-likelihood:", format(x$loglik, digits = digits),
-        "on", length(x$coefficients$count) + length(x$coefficients$zero) +
-             (x$dist == "negbin"), "df  (EM iter:", x$em_iter, ")\n")
+    digits <- .fastglm_print_digits(digits)
+    .fastglm_print_header("Zero-inflated regression",x$call)
+    .fastglm_print_field("Count distribution",x$dist)
+    .fastglm_print_field("Binary link",x$link)
+    .fastglm_print_coefficients(x$coefficients$count,"Count coefficients",digits,...)
+    .fastglm_print_coefficients(x$coefficients$zero,"Zero-inflation coefficients",digits,...)
+    cat("\n")
+    if(x$dist=="negbin") .fastglm_print_table(data.frame(Theta=x$theta,`Std. Error`=x$SE.theta,check.names=FALSE),digits)
+    .fastglm_print_field("Log-likelihood",format(x$loglik,digits=digits))
+    .fastglm_print_convergence(x$converged,x$em_iter)
     invisible(x)
 }

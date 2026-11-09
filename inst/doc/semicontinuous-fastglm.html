@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Jared Huling" />
+
+
+<title>Two-part models for nonnegative continuous outcomes</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Two-part models for nonnegative continuous
+outcomes</h1>
+<h4 class="author">Jared Huling</h4>
+
+
+
+<p>Health care expenditures and other nonnegative outcomes often contain
+a substantial proportion of zeros together with a right-skewed positive
+distribution. A single Gamma regression excludes the zero observations
+and therefore addresses only the positive-outcome mean. A two-part model
+describes both the probability of a positive outcome and its conditional
+mean, allowing inference about the overall mean.</p>
+<p>Let <span class="math inline">\(\pi(z)=\Pr(Y&gt;0\mid z)\)</span> and
+<span class="math inline">\(m(x)=E(Y\mid Y&gt;0,x)\)</span>. We use a
+binomial regression for <span class="math inline">\(\pi(z)\)</span> and
+a Gamma regression with a log link for <span class="math inline">\(m(x)\)</span>. The resulting marginal mean is
+<span class="math display">\[
+E(Y\mid x,z)=\pi(z)m(x).
+\]</span> The two regressions describe different quantities: whether an
+outcome is positive and how large it is when positive. Under the stated
+likelihood model, their coefficient uncertainty separates into two
+covariance blocks, with zero covariance between the blocks. Uncertainty
+in the overall mean still depends on both regressions. The delta method
+approximates this uncertainty by calculating how small changes in either
+set of coefficients change the product <span class="math inline">\(\pi(z)m(x)\)</span>.</p>
+<div id="fitting-and-interpreting-the-components" class="section level1">
+<h1>Fitting and interpreting the components</h1>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(fastglm)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">619</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>d <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">age=</span><span class="fu">rnorm</span>(<span class="dv">800</span>,<span class="dv">50</span>,<span class="dv">10</span>), <span class="at">severity=</span><span class="fu">rnorm</span>(<span class="dv">800</span>))</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>probability <span class="ot">&lt;-</span> <span class="fu">plogis</span>(<span class="sc">-</span>.<span class="dv">4</span><span class="fl">+.02</span><span class="sc">*</span>(d<span class="sc">$</span>age<span class="dv">-50</span>)<span class="sc">+</span>.<span class="dv">5</span><span class="sc">*</span>d<span class="sc">$</span>severity)</span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>positive_mean <span class="ot">&lt;-</span> <span class="fu">exp</span>(<span class="dv">5</span><span class="fl">+.015</span><span class="sc">*</span>(d<span class="sc">$</span>age<span class="dv">-50</span>)<span class="sc">+</span>.<span class="dv">4</span><span class="sc">*</span>d<span class="sc">$</span>severity)</span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a>d<span class="sc">$</span>cost <span class="ot">&lt;-</span> <span class="fu">rbinom</span>(<span class="dv">800</span>,<span class="dv">1</span>,probability)<span class="sc">*</span><span class="fu">rgamma</span>(<span class="dv">800</span>,<span class="at">shape=</span><span class="dv">2</span>,<span class="at">scale=</span>positive_mean<span class="sc">/</span><span class="dv">2</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">fastglm_twopart</span>(cost<span class="sc">~</span>age<span class="sc">+</span>severity<span class="sc">|</span>age<span class="sc">+</span>severity,<span class="at">data=</span>d)</span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="fu">summary</span>(fit)</span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a><span class="co">#&gt; Two-part binomial / Gamma regression</span></span>
+<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a><span class="co">#&gt; Call:</span></span>
+<span id="cb1-12"><a href="#cb1-12" tabindex="-1"></a><span class="co">#&gt; fastglm_twopart(formula = cost ~ age + severity | age + severity, </span></span>
+<span id="cb1-13"><a href="#cb1-13" tabindex="-1"></a><span class="co">#&gt;     data = d)</span></span>
+<span id="cb1-14"><a href="#cb1-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-15"><a href="#cb1-15" tabindex="-1"></a><span class="co">#&gt; Coefficients:</span></span>
+<span id="cb1-16"><a href="#cb1-16" tabindex="-1"></a><span class="co">#&gt;                    Estimate Std. Error z value Pr(&gt;|z|)    </span></span>
+<span id="cb1-17"><a href="#cb1-17" tabindex="-1"></a><span class="co">#&gt; count_(Intercept)  4.220789   0.209400  20.157  &lt; 1e-04 ***</span></span>
+<span id="cb1-18"><a href="#cb1-18" tabindex="-1"></a><span class="co">#&gt; count_age          0.015317   0.003991   3.838 0.000124 ***</span></span>
+<span id="cb1-19"><a href="#cb1-19" tabindex="-1"></a><span class="co">#&gt; count_severity     0.412469   0.038743  10.646  &lt; 1e-04 ***</span></span>
+<span id="cb1-20"><a href="#cb1-20" tabindex="-1"></a><span class="co">#&gt; zero_(Intercept)  -1.713377   0.375465  -4.563  &lt; 1e-04 ***</span></span>
+<span id="cb1-21"><a href="#cb1-21" tabindex="-1"></a><span class="co">#&gt; zero_age           0.024144   0.007305   3.305 0.000950 ***</span></span>
+<span id="cb1-22"><a href="#cb1-22" tabindex="-1"></a><span class="co">#&gt; zero_severity      0.515819   0.077785   6.631  &lt; 1e-04 ***</span></span>
+<span id="cb1-23"><a href="#cb1-23" tabindex="-1"></a><span class="co">#&gt; ---</span></span>
+<span id="cb1-24"><a href="#cb1-24" tabindex="-1"></a><span class="co">#&gt; Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</span></span>
+<span id="cb1-25"><a href="#cb1-25" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-26"><a href="#cb1-26" tabindex="-1"></a><span class="co">#&gt; Log-likelihood: -2313</span></span>
+<span id="cb1-27"><a href="#cb1-27" tabindex="-1"></a><span class="co">#&gt; Observations: 800</span></span>
+<span id="cb1-28"><a href="#cb1-28" tabindex="-1"></a><span class="co">#&gt; Convergence: converged</span></span></code></pre></div>
+<p>The first right-hand side specifies the positive-outcome regression,
+and the second specifies the probability of a positive outcome. A
+formula with a single right-hand side uses the same predictors in both
+regressions. The two regressions can therefore reflect different
+mechanisms when scientific knowledge supports that specification.</p>
+<p>An association can be tested within either component or jointly
+across both. The <code>positive</code> component describes the amount
+among positive outcomes, whereas the <code>binary</code> component
+describes the probability of a positive outcome. The default tests the
+selected term wherever it occurs in the two regressions.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">fastglm_wald_test</span>(fit,<span class="at">terms=</span><span class="st">&quot;severity&quot;</span>,<span class="at">component=</span><span class="st">&quot;positive&quot;</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt; Terms: severity</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt; Covariance: model-based</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt; Component: Positive amount</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt;      113.3  1 &lt; 1e-04</span></span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a><span class="co">#&gt;                Estimate Std. Error    Null</span></span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a><span class="co">#&gt; count_severity  0.41247    0.03874 0.00000</span></span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a><span class="fu">fastglm_wald_test</span>(fit,<span class="at">terms=</span><span class="st">&quot;severity&quot;</span>,<span class="at">component=</span><span class="st">&quot;binary&quot;</span>)</span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a><span class="co">#&gt; Terms: severity</span></span>
+<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a><span class="co">#&gt; Covariance: model-based</span></span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a><span class="co">#&gt; Component: Positive-outcome probability</span></span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a><span class="co">#&gt;      43.97  1 &lt; 1e-04</span></span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a><span class="co">#&gt;               Estimate Std. Error    Null</span></span>
+<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a><span class="co">#&gt; zero_severity  0.51582    0.07779 0.00000</span></span>
+<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb2-32"><a href="#cb2-32" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span>
+<span id="cb2-33"><a href="#cb2-33" tabindex="-1"></a><span class="fu">fastglm_wald_test</span>(fit,<span class="at">terms=</span><span class="st">&quot;severity&quot;</span>)</span>
+<span id="cb2-34"><a href="#cb2-34" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb2-35"><a href="#cb2-35" tabindex="-1"></a><span class="co">#&gt; Terms: severity</span></span>
+<span id="cb2-36"><a href="#cb2-36" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb2-37"><a href="#cb2-37" tabindex="-1"></a><span class="co">#&gt; Covariance: model-based</span></span>
+<span id="cb2-38"><a href="#cb2-38" tabindex="-1"></a><span class="co">#&gt; Component: Positive amount, Positive-outcome probability</span></span>
+<span id="cb2-39"><a href="#cb2-39" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-40"><a href="#cb2-40" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb2-41"><a href="#cb2-41" tabindex="-1"></a><span class="co">#&gt;      157.3  2 &lt; 1e-04</span></span>
+<span id="cb2-42"><a href="#cb2-42" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-43"><a href="#cb2-43" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb2-44"><a href="#cb2-44" tabindex="-1"></a><span class="co">#&gt;                Estimate Std. Error    Null</span></span>
+<span id="cb2-45"><a href="#cb2-45" tabindex="-1"></a><span class="co">#&gt; count_severity  0.41247    0.03874 0.00000</span></span>
+<span id="cb2-46"><a href="#cb2-46" tabindex="-1"></a><span class="co">#&gt; zero_severity   0.51582    0.07779 0.00000</span></span>
+<span id="cb2-47"><a href="#cb2-47" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb2-48"><a href="#cb2-48" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb2-49"><a href="#cb2-49" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span></code></pre></div>
+<p>These Wald tests use a first-order chi-square approximation. They
+assess the specified regression coefficients and do not test whether the
+entire two-part distribution is appropriate. A factor with several
+levels is tested as a complete formula term, avoiding separate tests of
+each reference-level comparison.</p>
+</div>
+<div id="marginal-predictions" class="section level1">
+<h1>Marginal predictions</h1>
+<p>A coefficient in the positive-outcome regression describes a
+conditional association among observations with positive outcomes. Its
+effect on the overall mean also depends on the binary regression.
+Predictions make this distinction explicit.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>new <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">age=</span><span class="fu">c</span>(<span class="dv">40</span>,<span class="dv">60</span>),<span class="at">severity=</span><span class="fu">c</span>(<span class="dv">0</span>,<span class="dv">0</span>))</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="fu">cbind</span>(<span class="at">probability_positive=</span><span class="dv">1</span><span class="sc">-</span><span class="fu">predict</span>(fit,new,<span class="at">type=</span><span class="st">&quot;zero&quot;</span>),</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>      <span class="at">positive_mean=</span><span class="fu">predict</span>(fit,new,<span class="at">type=</span><span class="st">&quot;count&quot;</span>),</span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>      <span class="at">marginal_mean=</span><span class="fu">predict</span>(fit,new,<span class="at">type=</span><span class="st">&quot;response&quot;</span>))</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a><span class="co">#&gt;   probability_positive positive_mean marginal_mean</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co">#&gt; 1            0.3213365      125.6466      40.37485</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="co">#&gt; 2            0.4341924      170.6843      74.10982</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="fu">predict</span>(fit,new,<span class="at">type=</span><span class="st">&quot;response&quot;</span>,<span class="at">se.fit=</span><span class="cn">TRUE</span>)</span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt; Predictions with standard errors</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co">#&gt; Scale: response mean</span></span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co">#&gt;  Row Estimate Std. Error</span></span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="co">#&gt;    1    40.37      3.844</span></span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co">#&gt;    2    74.11      5.885</span></span></code></pre></div>
+<p>The standard errors condition on the supplied covariates and use the
+model-based covariance of both regressions. They do not account for
+model selection or misspecification of the positive-outcome
+distribution. Simulation provides a complementary assessment of the
+fitted zero frequency and positive tail.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>replicates <span class="ot">&lt;-</span> <span class="fu">simulate</span>(fit,<span class="at">nsim=</span><span class="dv">2</span>,<span class="at">seed=</span><span class="dv">620</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="fu">vapply</span>(replicates,mean,<span class="fu">numeric</span>(<span class="dv">1</span>))</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="co">#&gt;    sim_1    sim_2 </span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="co">#&gt; 64.91743 77.56146</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="fu">mean</span>(d<span class="sc">$</span>cost)</span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="co">#&gt; [1] 69.3556</span></span></code></pre></div>
+<p>The <code>firth=TRUE</code> option modifies the estimating equations
+to reduce the leading small-sample bias in both regressions. For the
+Gamma regression, it also adjusts the equation used to estimate
+dispersion, which determines the spread of positive outcomes around
+their conditional mean. It can be useful when the positive subset is
+small, although numerical convergence and the adequacy of both mean
+models still require examination.</p>
+</div>
+<div id="comparing-average-outcomes" class="section level1">
+<h1>Comparing average outcomes</h1>
+<p>A change in a predictor can affect both the probability of a positive
+outcome and its amount. An average prediction contrast combines these
+changes on the outcome scale. The function supplied through
+<code>contrast</code> below increases severity by one unit in both
+regression designs and leaves the other predictors unchanged. The
+reported estimate is the average change in the fitted overall mean.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>change_severity <span class="ot">&lt;-</span> <span class="cf">function</span>(design) {</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>    design<span class="sc">$</span>count[,<span class="st">&quot;severity&quot;</span>] <span class="ot">&lt;-</span> design<span class="sc">$</span>count[,<span class="st">&quot;severity&quot;</span>]<span class="sc">+</span><span class="dv">1</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>    design<span class="sc">$</span>zero[,<span class="st">&quot;severity&quot;</span>] <span class="ot">&lt;-</span> design<span class="sc">$</span>zero[,<span class="st">&quot;severity&quot;</span>]<span class="sc">+</span><span class="dv">1</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>    design</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>}</span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="fu">fastglm_average</span>(fit,<span class="at">contrast=</span>change_severity)</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co">#&gt;   estimate std.error conf.low conf.high</span></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt; 1  63.9238  7.876662 48.48582  79.36177</span></span></code></pre></div>
+<p>This comparison conditions on the observed predictor distribution and
+describes the fitted association. A causal interpretation requires
+additional assumptions about treatment assignment, confounding, and the
+meaning of the intervention. If only the positive-outcome process is to
+be changed, the transformation can instead modify
+<code>design$count</code> alone.</p>
+<p>Repeated outcomes within the same patient or site can make the
+model-based standard errors inappropriate. Cluster-robust covariance
+sums the estimating contributions from both regressions within each
+independent group. Their estimation errors may then be related across
+components even though the likelihood-based covariance has separate
+blocks.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>cluster <span class="ot">&lt;-</span> <span class="fu">rep</span>(<span class="fu">seq_len</span>(<span class="dv">160</span>),<span class="at">each=</span><span class="dv">5</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>V <span class="ot">&lt;-</span> <span class="fu">fastglm_vcov</span>(fit,<span class="at">type=</span><span class="st">&quot;HC1&quot;</span>,<span class="at">cluster=</span>cluster,<span class="at">full=</span><span class="cn">TRUE</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="fu">fastglm_average</span>(fit,<span class="at">contrast=</span>change_severity,<span class="at">vcov.=</span>V)</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="co">#&gt;   estimate std.error conf.low conf.high</span></span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co">#&gt; 1  63.9238  7.714562 48.80353  79.04406</span></span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="fu">fastglm_wald_test</span>(fit,<span class="at">terms=</span><span class="st">&quot;severity&quot;</span>,<span class="at">vcov.=</span>V)</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co">#&gt; Joint Wald test</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt; Terms: severity</span></span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt; Estimation: fitted model coefficients</span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt; Covariance: supplied coefficient covariance</span></span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt; Component: Positive amount, Positive-outcome probability</span></span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a><span class="co">#&gt;  Statistic df p-value</span></span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a><span class="co">#&gt;        195  2 &lt; 1e-04</span></span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="co">#&gt; Tested contrasts:</span></span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a><span class="co">#&gt;                Estimate Std. Error    Null</span></span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="co">#&gt; count_severity  0.41247    0.03199 0.00000</span></span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="co">#&gt; zero_severity   0.51582    0.07754 0.00000</span></span>
+<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a><span class="co">#&gt; Note: First-order chi-square approximation; validity depends on coefficient</span></span>
+<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a><span class="co">#&gt;   estimability and the covariance assumptions.</span></span></code></pre></div>
+<p>The joint test uses the same cross-component covariance as the
+average comparison. The group identifiers in this example are
+illustrative. Actual identifiers should follow the sampling structure,
+and inference requires enough independent groups for the approximation
+to be useful. Robust covariance for mean-bias-reduced two-part fits is
+not currently supported; their Wald tests use the model-based
+first-order convention. A cluster bootstrap through
+<code>fastglm_bootstrap()</code> provides a refitting-based alternative
+under the same independence assumption; the count-model vignette gives a
+worked example.</p>
+</div>
+<div id="reading-large-outcome-datasets-in-blocks" class="section level1">
+<h1>Reading large outcome datasets in blocks</h1>
+<p>The same two-part model can be fitted when the complete predictor
+matrix cannot be kept in memory. A reader supplies blocks of rows, and
+<code>fastglm_source()</code> records the common factor coding and
+transformations. Both component regressions then revisit the same data
+as their coefficients are updated.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>read_cost <span class="ot">&lt;-</span> <span class="cf">function</span>(k) d[((k<span class="dv">-1</span>)<span class="sc">*</span><span class="dv">200</span><span class="sc">+</span><span class="dv">1</span>)<span class="sc">:</span>(k<span class="sc">*</span><span class="dv">200</span>),]</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>cost_source <span class="ot">&lt;-</span> <span class="fu">fastglm_source</span>(read_cost,<span class="dv">4</span>,</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>    <span class="at">formula=</span>cost<span class="sc">~</span>age<span class="sc">+</span>severity<span class="sc">|</span>age<span class="sc">+</span>severity,<span class="at">prototype=</span>d)</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>stream_fit <span class="ot">&lt;-</span> <span class="fu">fastglm_twopart</span>(cost_source)</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="fu">max</span>(<span class="fu">abs</span>(<span class="fu">unname</span>(<span class="fu">coef</span>(stream_fit))<span class="sc">-</span><span class="fu">unname</span>(<span class="fu">coef</span>(fit))))</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt; [1] 7.638334e-14</span></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="fu">fastglm_average</span>(stream_fit)</span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt;   estimate std.error conf.low conf.high</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt; 1 69.62791  4.260844 61.27681  77.97901</span></span></code></pre></div>
+<p>The fit retains the reader and coefficient summaries, allowing
+predictions and average outcomes to be calculated by another pass
+through the blocks. This reduces design memory while requiring the
+observations to remain accessible and unchanged. Sparse predictor
+matrices are also supported through
+<code>fastglm_twopart(X, response=y, z=Z)</code>, where <code>X</code>
+specifies the positive-outcome regression and <code>Z</code> the
+probability of a positive outcome.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

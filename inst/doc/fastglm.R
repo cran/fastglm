@@ -4,7 +4,7 @@ knitr::opts_chunk$set(
   comment = "#>",
   warning = FALSE,
   echo = TRUE,
-  eval = TRUE
+  eval = requireNamespace("glm2", quietly = TRUE)
 )
 
 ## ----eval = FALSE, echo=TRUE--------------------------------------------------
@@ -31,7 +31,7 @@ gfit2 <- glm(cbind(ncases, ncontrols) ~ agegp + unclass(tobgp) +
              family = binomial(link = "cloglog"),
              method = fastglm_fit)
 
-summary(gfit2, refit = FALSE)
+summary(gfit2)
 
 ## ----fig.show='hold'----------------------------------------------------------
 set.seed(1)

@@ -3,6 +3,7 @@
 
 #include "glm_base.h"
 #include "families.h"
+#include "bias_reduction.h"
 #include "chunk_source.h"
 
 #include <Eigen/SparseCore>
@@ -40,6 +41,27 @@ protected:
     double log_det_XtWX_;
     Eigen::MatrixXd A_prev;
     bool A_prev_available;
+    fglm::GammaWeightGroups dispersion_weight_groups;
+    bool constant_weights;
+    bool factor_ready;
+    Eigen::VectorXd constant_leverages;
+    Eigen::VectorXd gamma_adjustment;
+    double gamma_step_phi = 1;
+    bool gamma_step_failed = false;
+    bool gamma_initial_consistent = false;
+    bool firth_step_failed = false;
+    bool firth_step_limited = false;
+    int firth_step_reductions = 0;
+    fglm::BinomialFirthWorking binomial_working;
+    bool binomial_current=false;
+    void refresh_binomial_working() {
+        if(!binomial_current) {
+            // A proposed step may be nonfinite before step control. Defer
+            // validation until the accepted state supplies a scoring update.
+            binomial_working.update(fam_code,eta,Y,weights,true,false);
+            binomial_current=true;
+        }
+    }
 
     // Sparse decompositions (analyzePattern done once, factorize per iter)
     SpLLT  Ch;
@@ -59,6 +81,9 @@ protected:
             Eigen::Map<const Eigen::ArrayXd> e(eta.data(), eta.size());
             Eigen::Map<Eigen::ArrayXd>       d(mu_eta.data(), mu_eta.size());
             fglm::mu_eta(fam_code, fam_params, e, d);
+            if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
+                refresh_binomial_working();binomial_working.validate();
+            }
             return;
         }
         Rcpp::NumericVector v = mu_eta_fun(eta);
@@ -91,17 +116,29 @@ protected:
 
     void update_eta() override
     {
+        binomial_current=false;
         eta.noalias() = X * beta;
         eta += offset;
     }
 
     void update_z() override
     {
+        if(firth_ && fglm::bounded_firth_predictors(fam_code)) { z=eta-offset;return; }
         z = (eta - offset).array() + (Y - mu).array() / mu_eta.array();
     }
 
     void update_w() override
     {
+        if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            w=binomial_working.weight.array().sqrt();return;
+        }
+        // The sqrt-link derivative is floored near zero. In that exceptional
+        // region its implemented working weights are no longer constant.
+        if (fam_code == fglm::FAM_POISSON_SQRT &&
+            (eta.array() < fglm::thresh_eps() / 2).any()) {
+            constant_weights = false;
+            constant_leverages.resize(0);
+        }
         if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> me(mu_eta.data(), mu_eta.size());
@@ -117,7 +154,9 @@ protected:
     {
         devold = dev;
         double std_dev;
-        if (fam_code >= 0) {
+        if (firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            refresh_binomial_working();std_dev=binomial_working.deviance;
+        } else if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> wt(weights.data(), weights.size());
@@ -132,7 +171,9 @@ protected:
     void update_dev_resids_dont_update_old() override
     {
         double std_dev;
-        if (fam_code >= 0) {
+        if (firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            refresh_binomial_working();std_dev=binomial_working.deviance;
+        } else if (fam_code >= 0) {
             Eigen::Map<const Eigen::ArrayXd> y(Y.data(), Y.size());
             Eigen::Map<const Eigen::ArrayXd> m(mu.data(), mu.size());
             Eigen::Map<const Eigen::ArrayXd> wt(weights.data(), weights.size());
@@ -169,15 +210,64 @@ protected:
         return Rcpp::as<bool>(validmu(mu));
     }
 
+    bool failed() const override { return gamma_step_failed || firth_step_failed; }
+
     bool converged() override
     {
-        if (firth_)
-            return (beta - beta_prev).cwiseAbs().maxCoeff() < tol;
+        if (firth_) {
+            if (failed() || firth_step_limited || (beta-beta_prev).cwiseAbs().maxCoeff() >= tol) return false;
+            if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {
+                double phi = compute_firth_phi_sparse();
+                Eigen::VectorXd score = X.adjoint()*
+                    (weights.array()*(Y.array()/mu.array()-1)).matrix() + phi*gamma_adjustment;
+                return solve_factored(score).cwiseAbs().maxCoeff() < tol;
+            }
+            return true;
+        }
         return std::abs(dev - devold) / (0.1 + std::abs(dev)) < tol;
     }
 
     void run_step_halving(int &iterr) override
     {
+        firth_step_limited=false;
+        if(firth_ && fglm::bounded_firth_predictors(fam_code)) {
+            const Eigen::VectorXd delta=beta-beta_prev;
+            const Eigen::VectorXd change=X*delta;
+            const double fraction=fglm::firth_predictor_step_fraction(change,weights);
+            if(!delta.allFinite() || !std::isfinite(fraction)) {
+                firth_step_failed=true;beta=beta_prev;
+                update_eta();update_mu();update_dev_resids_dont_update_old();return;
+            }
+            if(fraction<1) {
+                beta=beta_prev+fraction*delta;
+                firth_step_limited=true;++firth_step_reductions;
+                update_eta();update_mu();update_dev_resids_dont_update_old();
+            }
+        }
+        if (firth_ && fam_code == fglm::FAM_GAMMA_LOG && (iterr > 0 || gamma_initial_consistent) &&
+            gamma_adjustment.size() == nvars) {
+            const Eigen::VectorXd delta = beta-beta_prev;
+            const double quadratic = delta.dot(XtWX*delta);
+            double fraction = 1;
+            int halves = 0;
+            while (true) {
+                const double change = dev-devold -
+                    2*gamma_step_phi*gamma_adjustment.dot(beta-beta_prev);
+                const double rounding = 64*std::numeric_limits<double>::epsilon()*
+                    (1+std::abs(dev)+std::abs(devold));
+                if (std::isfinite(dev) && valideta_check() && validmu_check() &&
+                    change <= -0.2*fraction*quadratic + rounding) break;
+                if (++halves > 50) {
+                    gamma_step_failed = true;
+                    beta = beta_prev; update_eta(); update_mu();
+                    update_dev_resids_dont_update_old();
+                    break;
+                }
+                step_halve(); fraction *= 0.5;
+                update_dev_resids_dont_update_old();
+            }
+            return;
+        }
         const bool firth_skip = firth_;
         if (!std::isfinite(dev)) {
             int itrr = 0;
@@ -210,23 +300,43 @@ protected:
     // ------------------------------------------------------------------
 
     // Factorize A with the active sparse Cholesky (LLT for type 2, LDLT for
-    // type 3) and solve A x = rhs.  analyzePattern is done once; the symbolic
+    // type 3). analyzePattern is done once; the symbolic
     // factor and the numeric factor are retained for the post-solve readouts
     // (log|X'WX|, (X'WX)^{-1}).
-    Eigen::VectorXd factorize_and_solve(const SpMat &A, const Eigen::VectorXd &rhs)
+    void factorize_information(const SpMat &A)
     {
         if (type == 2) {
             if (!pattern_analyzed) { Ch.analyzePattern(A); pattern_analyzed = true; }
             Ch.factorize(A);
             if (Ch.info() != Eigen::Success)
                 Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
-            return Ch.solve(rhs);
+            const SpMat &factor = Ch.matrixL().nestedExpression();
+            double smallest = std::numeric_limits<double>::infinity(), largest = 0;
+            for (int j = 0; j < nvars; ++j) {
+                double d = factor.coeff(j, j);
+                smallest = std::min(smallest, d); largest = std::max(largest, d);
+            }
+            if (smallest <= 1e-6 * largest)
+                Rcpp::stop("Sparse Cholesky factorization is ill-conditioned; rescale or reduce the design");
+            return;
         }
         if (!pattern_analyzed) { ChD.analyzePattern(A); pattern_analyzed = true; }
         ChD.factorize(A);
-        if (ChD.info() != Eigen::Success)
+        if (ChD.info() != Eigen::Success || (ChD.vectorD().array() <= 1e-12 * ChD.vectorD().maxCoeff()).any())
             Rcpp::stop("Sparse Cholesky factorization failed; X'WX may be singular or not positive definite");
+    }
+
+    Eigen::VectorXd solve_factored(const Eigen::VectorXd &rhs)
+    {
+        if (type == 2) return Ch.solve(rhs);
         return ChD.solve(rhs);
+    }
+
+    Eigen::VectorXd factorize_and_solve(const SpMat &A, const Eigen::VectorXd &rhs)
+    {
+        factorize_information(A);
+        factor_ready = true;
+        return solve_factored(rhs);
     }
 
     // (X' W^2 X)^{-1} from the retained factorization.
@@ -261,17 +371,16 @@ protected:
 
     double compute_firth_phi_sparse()
     {
-        const double eps = std::numeric_limits<double>::epsilon();
-        bool unit_disp = (fam_code >= fglm::FAM_BINOMIAL_LOGIT &&
-                          fam_code <= fglm::FAM_POISSON_SQRT);
-        if (fam_code == fglm::FAM_UNKNOWN) unit_disp = true;
-        if (unit_disp || nobs <= nvars) return 1.0;
-        Eigen::Map<const Eigen::ArrayXd> y_a(Y.data(), Y.size());
-        Eigen::Map<const Eigen::ArrayXd> m_a(mu.data(), mu.size());
-        Eigen::Map<const Eigen::ArrayXd> w_a(weights.data(), weights.size());
-        double phi = fglm::dev_resids_sum(fam_code, fam_params, y_a, m_a, w_a)
-                     / (nobs - nvars);
-        return (phi < eps) ? 1.0 : phi;
+        if(fglm::bounded_firth_predictors(fam_code)) return 1;
+        Eigen::Map<const Eigen::ArrayXd> yy(Y.data(), Y.size());
+        Eigen::Map<const Eigen::ArrayXd> mm(mu.data(), mu.size());
+        Eigen::Map<const Eigen::ArrayXd> ww(weights.data(), weights.size());
+        double d = fam_code >= 0 ? fglm::dev_resids_sum(fam_code, fam_params, yy, mm, ww)
+            : Rcpp::sum(Rcpp::as<Rcpp::NumericVector>(dev_resids_fun(Y, mu, weights)));
+        if (fam_code >= 10 && fam_code <= 12 && dispersion_weight_groups.empty())
+            dispersion_weight_groups = fglm::gamma_weight_groups(weights);
+        return fglm::adjusted_dispersion(fam_code, d, weights, rank,
+                                         &dispersion_weight_groups);
     }
 
     void compute_leverages_lagged(Eigen::VectorXd &h_out)
@@ -313,37 +422,49 @@ protected:
     void solve_wls_firth()
     {
         beta_prev = beta;
-        const double eps = std::numeric_limits<double>::epsilon();
-
-        Eigen::ArrayXd d2mu(nobs);
-        compute_d2mu_sparse(d2mu);
-        double phi = compute_firth_phi_sparse();
-
+        bool reuse_factor = constant_weights && factor_ready;
         Eigen::VectorXd w2 = w.array().square();
-        XtWX = SpMat(X.adjoint()) * w2.asDiagonal() * X;
+        if (!reuse_factor)
+            XtWX = SpMat(X.adjoint()) * w2.asDiagonal() * X;
 
-        if (!A_prev_available) {
-            Xtwz.noalias() = X.adjoint() * (w2.array() * z.array()).matrix();
-        } else {
-            Eigen::VectorXd h_lev;
-            compute_leverages_lagged(h_lev);
-
-            Eigen::ArrayXd dmu3 = mu_eta.array().cube();
-            for (int i = 0; i < nobs; ++i)
-                if (std::abs(dmu3[i]) < eps)
-                    dmu3[i] = (dmu3[i] >= 0) ? eps : -eps;
-
-            Eigen::ArrayXd xi = phi * h_lev.array() * d2mu * var_mu.array()
-                              / (2.0 * weights.array().max(eps) * dmu3);
-            Eigen::VectorXd zstar = z + xi.matrix();
-            Xtwz.noalias() = X.adjoint() * (w2.array() * zstar.array()).matrix();
+        if ((fam_code == fglm::FAM_GAMMA_LOG && !A_prev_available) ||
+            fglm::bounded_firth_predictors(fam_code)) {
+            factorize_information(XtWX);
+            factor_ready = true; reuse_factor = true;
+            compute_log_det_XtWX_sparse(); update_A_prev_sparse();
         }
-
-        beta = factorize_and_solve(XtWX, Xtwz);
+        const bool needs_adjustment = A_prev_available &&
+            fam_code != fglm::FAM_GAUSSIAN_IDENTITY;
+        Eigen::VectorXd zstar = z;
+        const bool stable_binomial=fglm::bounded_firth_predictors(fam_code);
+        Eigen::VectorXd numerator;
+        if(stable_binomial) numerator=(w2.array()*z.array()).matrix()+binomial_working.score;
+        if (needs_adjustment) {
+            Eigen::ArrayXd d2mu(nobs);
+            compute_d2mu_sparse(d2mu);
+            double phi = compute_firth_phi_sparse();
+            gamma_step_phi = phi;
+            Eigen::VectorXd h_lev;
+            if (constant_weights && constant_leverages.size() == nobs)
+                h_lev = constant_leverages;
+            else {
+                compute_leverages_lagged(h_lev);
+                if (constant_weights) constant_leverages = h_lev;
+            }
+            if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == 0)
+                gamma_adjustment.noalias() = 0.5 * X.adjoint() * h_lev;
+            if(stable_binomial) numerator.array()+=.5*h_lev.array()*binomial_working.ratio.array();
+            else for (int i = 0; i < nobs; ++i)
+                if (weights[i] > 0 && w2[i] != 0 && mu_eta[i] != 0)
+                    zstar[i] += phi * h_lev[i] * (d2mu[i] / mu_eta[i]) / (2 * w2[i]);
+        }
+        Xtwz.noalias() = X.adjoint() * (stable_binomial ? numerator : Eigen::VectorXd((w2.array()*zstar.array()).matrix()));
+        beta = reuse_factor ? solve_factored(Xtwz) : factorize_and_solve(XtWX, Xtwz);
         rank = nvars;
-
-        compute_log_det_XtWX_sparse();
-        update_A_prev_sparse();
+        if (!reuse_factor) {
+            compute_log_det_XtWX_sparse();
+            update_A_prev_sparse();
+        }
     }
 
     // ------------------------------------------------------------------
@@ -363,6 +484,27 @@ protected:
 
         beta = factorize_and_solve(XtWX, Xtwz);
         rank = nvars;  // assume full rank for sparse Cholesky (factorize will fail otherwise)
+    }
+
+    void finalize_inference(int /*iter*/) override
+    {
+        // Rebuild information at the reported mean, without computing a
+        // coefficient update or bias adjustment that would be discarded.
+        update_var_mu();
+        update_mu_eta();
+        update_w();
+        if (!(firth_ && constant_weights && factor_ready)) {
+            Eigen::VectorXd w2 = w.array().square();
+            XtWX = SpMat(X.adjoint()) * w2.asDiagonal() * X;
+            factorize_information(XtWX);
+            factor_ready = true;
+        }
+        if (firth_) {
+            const double previous_log_det = log_det_XtWX_;
+            compute_log_det_XtWX_sparse();
+            dev += previous_log_det - log_det_XtWX_;
+        }
+        save_vcov();
     }
 
     void save_se() override
@@ -398,7 +540,10 @@ public:
         fam_params(fam_params_),
         firth_(firth_flag), log_det_XtWX_(0.0),
         A_prev(X_.cols(), X_.cols()), A_prev_available(false),
-        pattern_analyzed(false), Xtwz(X_.cols())
+        constant_weights(fam_code_ == fglm::FAM_GAUSSIAN_IDENTITY ||
+                         fam_code_ == fglm::FAM_POISSON_SQRT ||
+                         fam_code_ == fglm::FAM_GAMMA_LOG),
+        factor_ready(false), pattern_analyzed(false), Xtwz(X_.cols())
     {}
 
     void init_parms(const Eigen::Map<Eigen::VectorXd> &start_,
@@ -408,6 +553,11 @@ public:
         beta = start_;
         eta  = eta_;
         mu   = mu_;
+        if (firth_ && fam_code == fglm::FAM_GAMMA_LOG) {
+            const Eigen::VectorXd mapped = X*beta + offset;
+            gamma_initial_consistent = (mapped-eta).cwiseAbs().maxCoeff() <=
+                16*std::numeric_limits<double>::epsilon()*(1+eta.cwiseAbs().maxCoeff());
+        }
         update_dev_resids();
         rank = nvars;
     }
@@ -415,6 +565,50 @@ public:
     int get_rank() override { return rank; }
     Eigen::VectorXd get_weights() override { return weights; }
     double get_log_det_XtWX() const { return log_det_XtWX_; }
+    double get_bias_dispersion() { return compute_firth_phi_sparse(); }
+    double get_binomial_deviance() {
+        refresh_binomial_working();
+        return binomial_working.deviance;
+    }
+    void append_bias_diagnostics(Rcpp::List& out, double phi, bool inference)
+    {
+        const std::string reason = firth_step_failed ? "nonfinite_scoring_step" : gamma_step_failed ? "step_halving_failed" :
+            (conv ? "converged" : "iteration_limit");
+        out["convergence.reason"] = reason;
+        if(fglm::bounded_firth_predictors(fam_code)) {
+            out["step.reductions"]=firth_step_reductions;out["stable.binomial"]=true;
+        }
+        if (!inference && !constant_weights) return;
+        Eigen::VectorXd score;
+        if (fam_code == fglm::FAM_GAMMA_LOG && gamma_adjustment.size() == nvars) {
+            score = X.adjoint()*(weights.array()*(Y.array()/mu.array()-1)/phi).matrix() + gamma_adjustment;
+        } else if (fam_code == fglm::FAM_GAUSSIAN_IDENTITY) {
+            score = X.adjoint()*(weights.array()*(Y.array()-mu.array())/phi).matrix();
+        } else {
+            if (!inference) { update_var_mu(); update_mu_eta(); update_w(); }
+            Eigen::VectorXd h;
+            if (constant_leverages.size() == nobs) h = constant_leverages;
+            else { update_A_prev_sparse(); compute_leverages_lagged(h); }
+            Eigen::ArrayXd d2mu(nobs); compute_d2mu_sparse(d2mu);
+            Eigen::VectorXd contribution = Eigen::VectorXd::Zero(nobs);
+            if(fglm::bounded_firth_predictors(fam_code))
+                contribution=binomial_working.score+(.5*h.array()*binomial_working.ratio.array()).matrix();
+            else for (int i=0;i<nobs;++i) if (weights[i] > 0 && mu_eta[i] != 0)
+                contribution[i] = weights[i]*mu_eta[i]*(Y[i]-mu[i])/(phi*var_mu[i]) +
+                    h[i]*d2mu[i]/(2*mu_eta[i]);
+            score = X.adjoint()*contribution;
+        }
+        Eigen::VectorXd information = XtWX.diagonal()/phi;
+        const double dev = Rcpp::as<double>(out["deviance"]);
+        fglm::GammaDispersionTerms terms;
+        if (fam_code >= 10 && fam_code <= 12) {
+            if (dispersion_weight_groups.empty()) dispersion_weight_groups = fglm::gamma_weight_groups(weights);
+            terms.add(dispersion_weight_groups,phi);
+        }
+        double ds, ds_scaled;
+        fglm::dispersion_diagnostics(fam_code,dev,(weights.array()>0).count(),rank,phi,terms,ds,ds_scaled);
+        fglm::append_adjusted_diagnostics(out,score,information,ds,ds_scaled,reason);
+    }
     bool   get_firth()        const { return firth_; }
 };
 
