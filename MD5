@@ -1,6 +1,6 @@
-1838e640f518c4ff1d743e134ca2ad96 *DESCRIPTION
+a413bd6c2947485a9b426d3a5591af44 *DESCRIPTION
 856ecea212fab7d9a9b62a76887241d7 *NAMESPACE
-a659017c4504869a7783ada970b2dea0 *NEWS.md
+325b424c2e3616d4232a663d3c327d2b *NEWS.md
 d858e43958767d27c94d00b4b290be2f *R/RcppExports.R
 18c549ddb7747ea75ae9fa1f8e2c222b *R/bigmemory_methods.R
 cfc461489f2c5b92ec6d9fdb2f93d5d8 *R/binomial-tails.R
@@ -65,10 +65,10 @@ c4f8a4f6dcde218c9d6bff41865cc431 *inst/doc/count-firth-fastglm.html
 2884b7c0dd9094fdb650034be6c87bbe *inst/doc/fastglm-overview.html
 534038f00778a26732eb5e0efa2ce13d *inst/doc/fastglm.R
 67543d510b214ac3828d709270552517 *inst/doc/fastglm.Rmd
-a8f211b7aedf6eb960af40c7a2530c70 *inst/doc/fastglm.html
+cbbfc19ba26b8e79c5b736af3afcfd3f *inst/doc/fastglm.html
 db1450c6bf43ed25d67a03ffc07af195 *inst/doc/firth-fastglm.R
 11dd3619be0f63b417b611b91c74a25d *inst/doc/firth-fastglm.Rmd
-a97590c88f2bc2817b3e02eb70a7b1cf *inst/doc/firth-fastglm.html
+04bcaad1095f3db762a8e5d37fc853c3 *inst/doc/firth-fastglm.html
 5df41bb17388ee0e2479bbfca8c9a0a7 *inst/doc/large-data-fastglm.R
 20864e00312f5e69d3516856522632aa *inst/doc/large-data-fastglm.Rmd
 4b3f3245220deb8f5c5cba77eeba2bda *inst/doc/large-data-fastglm.html
@@ -93,7 +93,7 @@ f41571b8e9aeaa68a3ba3bb5749bc80c *inst/include/glm_base.h
 a018a228cdc7e7bedd4a96ac472483a5 *inst/include/glm_sparse.h
 8295c19c2e35a4cca094819d27edd186 *inst/include/nb_theta.h
 968e916f7b1b053e8b29da5088ddb414 *inst/include/ordinal.h
-12aff1ed2bf3b12f12f5a5d8654f8369 *inst/include/ordinal_constrained.h
+330a94acb129d2e68da1b4299f303a3b *inst/include/ordinal_constrained.h
 72da35151f09acd62089340d3c0ffd37 *inst/include/ordinal_partial.h
 c35afb57785efd640176730dbce5673a *inst/include/prepared_glm.h
 3c902a0d786e0de989ae6c14e62c8393 *inst/include/streaming_qr.h
@@ -161,9 +161,9 @@ f57d8d2f16ecc877495cf3ee850a9b6a *src/RcppExports.cpp
 cc28339eb124d886dfb075c4649a6805 *src/bigmemory.cpp
 11f1684b1d6fcc690487f4cc019dbdbf *src/binomial_firth.cpp
 ec7c55929cf7641ab9a162212fbc2417 *src/colmin_colmax.cpp
-5303be8631ba72969a308af953aaf02e *src/count_kernels.cpp
+e8d17fd7eaddc8f957375ec506ecce9f *src/count_kernels.cpp
 633f102ae9cc4e1f49c2c7ac10bb3da4 *src/firth_profile.cpp
-b0ce6dbf8f5e08fea4a7418c0d7e0c42 *src/fit_glm_dense.cpp
+a000afe6fe743d1ca202cd72be22c370 *src/fit_glm_dense.cpp
 ae5625754fa4cb482577c56065311d76 *src/fit_glm_firth.cpp
 beb69a5cbb250978c609cf942bf06198 *src/fit_glm_hurdle.cpp
 1a53ca361511c262a3541a2848eb4852 *src/fit_glm_nb.cpp
@@ -251,7 +251,7 @@ fd849a4ddcb24476444da266482586d9 *tests/testthat/test-ordinal-streaming.R
 b3acf895db8c702f7733c9b71ebd14ef *tests/testthat/test-result-display.R
 7b1ba214727313201976528eb22a512e *tests/testthat/test-review-fixes.R
 08ea06997099b297f8f4a5a596118558 *tests/testthat/test-robust-se.R
-a9516457c5a3ab3f18f948b15410fa23 *tests/testthat/test-sources.R
+512df0215d04b9f69cd9fb1c9145f2de *tests/testthat/test-sources.R
 ac48f59f8bd56b7bfefb833a23321169 *tests/testthat/test-sparse.R
 f9746366b950aca46553d38bf044ae32 *tests/testthat/test-stream-retention.R
 7742eabb04d654796d35db6a2ee74189 *tests/testthat/test-streaming-callback.R

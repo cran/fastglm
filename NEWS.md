@@ -1,3 +1,15 @@
+# fastglm 0.1.4
+
+* Sparse designs are now read with `Eigen::Map<Eigen::SparseMatrix>` instead of
+  `Eigen::MappedSparseMatrix`, which Eigen 5 removes, so the package builds with
+  both the current and the upcoming 'RcppEigen'.
+* Constrained cumulative-link fits with no predictor columns no longer form a
+  row block of an empty matrix, which offset a null pointer.
+* The count model kernels no longer call `realloc()` with size 0 when a data
+  block has no rows with positive weight.
+* The Parquet source test is skipped when 'arrow' is built without Parquet
+  support.
+
 # fastglm 0.1.3
 
 ## Behavior changes
